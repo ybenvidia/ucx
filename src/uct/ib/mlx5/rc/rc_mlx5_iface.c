@@ -721,6 +721,46 @@ uct_rc_mlx5_iface_subscribe_cqs(uct_rc_mlx5_iface_common_t *iface)
     return status;
 }
 
+void uct_rc_mlx5_parse_topo_file(uct_rc_mlx5_iface_common_t *iface, uct_rc_mlx5_iface_common_config_t *mlx5_config) {
+    char buffer[256] = {};
+    int len, i;
+    FILE* file;
+    uct_rc_mlx5_long_file_config_t *long_config;
+    if (!*mlx5_config->topo_path) {
+        return;
+    }
+
+    file = fopen(mlx5_config->topo_path, "r");
+    if (file == NULL) {
+        printf("Error opening file\n");
+        return;
+    }
+
+    if (fgets(buffer, sizeof(buffer), file) == NULL) {
+        printf("Error reading from file or empty file\n");
+        fclose(file);
+        return;
+    }
+    
+    len = atoi(buffer);
+    long_config = ucs_calloc(len, sizeof(uct_rc_mlx5_long_file_config_t), "long cable configuration");
+
+    for (i = 0; i < len; i++)
+    {
+        if (fgets(long_config[i].src_gid, UCS_IPV6_ADDR_LEN, file) == NULL || 
+            fgets(long_config[i].dst_gid, UCS_IPV6_ADDR_LEN, file) == NULL) {
+            printf("Error reading GIDs from file\n");
+            fclose(file);
+            return;
+        }
+    }
+    
+    iface->long_cable_config.length = len;
+    iface->long_cable_config.topo_arr = long_config;
+
+    fclose(file);
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
                     uct_rc_iface_ops_t *ops, uct_md_h tl_md,
                     uct_worker_h worker, const uct_iface_params_t *params,
@@ -769,6 +809,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     if (!UCT_RC_MLX5_MP_ENABLED(self)) {
         self->tm.am_desc.offset = self->super.super.config.rx_headroom_offset;
     }
+
+    uct_rc_mlx5_parse_topo_file(self, mlx5_config);
 
     status = uct_ib_mlx5_iface_select_sl(&self->super.super,
                                          &mlx5_config->super,
@@ -889,6 +931,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_common_t)
     ucs_mpool_cleanup(&self->tx.atomic_desc_mp, 1);
     uct_rc_mlx5_iface_common_dm_cleanup(self);
     uct_rc_mlx5_iface_common_tag_cleanup(self);
+    ucs_free(self->long_cable_config.topo_arr);
     UCS_STATS_NODE_FREE(self->stats);
 }
 

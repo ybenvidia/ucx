@@ -82,6 +82,11 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, log_ack_req_freq),
    UCS_CONFIG_TYPE_UINT},
 
+   {"META_TOPOLOGY_FILE", "ucx/topology_config.txt",
+   "Topology file for ISR1-PRE meta hack",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, topo_path),
+   UCS_CONFIG_TYPE_STRING},
+
   {NULL}
 };
 

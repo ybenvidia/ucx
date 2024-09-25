@@ -212,6 +212,11 @@ typedef struct uct_rc_mlx5_cmd_wq {
                                                ops array size */
 } uct_rc_mlx5_cmd_wq_t;
 
+typedef struct {
+    char src_gid[UCS_IPV6_ADDR_LEN];
+    char dst_gid[UCS_IPV6_ADDR_LEN];
+} uct_rc_mlx5_long_file_config_t;
+
 
 /* Message context used with multi-packet XRQ */
 typedef struct uct_rc_mlx5_mp_context {
@@ -408,6 +413,12 @@ typedef struct uct_rc_mlx5_iface_common {
         uct_rc_mlx5_srq_topo_t         srq_topo;
         uint8_t                        log_ack_req_freq;
     } config;
+    struct
+    {
+        uct_rc_mlx5_long_file_config_t *topo_arr;
+        uint16_t length;
+    } long_cable_config;
+    
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;
 
@@ -427,6 +438,7 @@ typedef struct uct_rc_mlx5_iface_common_config {
     unsigned                             exp_backoff;
     unsigned                             log_ack_req_freq;
     UCS_CONFIG_STRING_ARRAY_FIELD(types) srq_topo;
+    char*                                topo_path;
 } uct_rc_mlx5_iface_common_config_t;
 
 
