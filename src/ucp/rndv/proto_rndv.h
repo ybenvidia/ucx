@@ -69,6 +69,11 @@ typedef struct {
 typedef struct {
     ucp_proto_rndv_ack_priv_t super;
 
+    /* Memory type of fragment buffers which are used by get/mtype and put/mtype
+     * protocols.
+     * TODO: Create a separate struct for mtype protocols and move it there. */
+    ucs_memory_type_t         frag_mem_type;
+
     /* Multi-lane common part. Must be the last field, see
        @ref ucp_proto_multi_priv_t */
     ucp_proto_multi_priv_t    mpriv;
@@ -127,6 +132,13 @@ enum {
 
     /* Memtype only: send the fragment to the remote side */
     UCP_PROTO_RNDV_PUT_MTYPE_STAGE_SEND
+};
+
+
+/* rndv_get stages */
+enum {
+    UCP_PROTO_RNDV_GET_STAGE_FETCH = UCP_PROTO_STAGE_START,
+    UCP_PROTO_RNDV_GET_STAGE_ATS
 };
 
 
@@ -211,5 +223,8 @@ void ucp_proto_rndv_ppln_send_frag_complete(ucp_request_t *freq, int send_ack);
 
 void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack,
                                             int abort);
+
+
+void ucp_proto_rndv_stub_abort(ucp_request_t *req, ucs_status_t status);
 
 #endif
