@@ -381,15 +381,40 @@ void uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
     uct_ib_mlx5_md_buf_free(md, srq->buf, &srq->devx.mem);
 }
 
+void print_gid_raw(const uint8_t raw[16]) {
+    for (int i = 0; i < 16; i++) {
+        printf("%02x", raw[i]);
+        if (i % 2 == 1 && i < 15) {
+            printf(":");
+        }
+    }
+    printf("\n");
+}
+
 int check_gid_in_table(uct_rc_mlx5_iface_common_t *iface, struct ibv_ah_attr *ah_attr, uct_rc_mlx5_long_file_config_t *topo_arr, uint16_t length) {
     for (uint16_t i = 0; i < length; i++) {
-        printf("%s", topo_arr[i].src_gid);
-        if (memcmp(iface->super.super.gid_info.gid.raw, topo_arr[i].src_gid, sizeof(ah_attr->grh.dgid.raw)) == 0
-            && memcmp(ah_attr->grh.dgid.raw, topo_arr[i].dst_gid, sizeof(ah_attr->grh.dgid.raw)) == 0) {
+        printf("Checking topo_arr[%d]:\n", i);
+        printf(" - topo_arr[i].src_gid_raw: ");
+        print_gid_raw(topo_arr[i].src_gid_raw);
+        printf(" - topo_arr[i].dst_gid_raw: ");
+        print_gid_raw(topo_arr[i].dst_gid_raw);
+        
+        printf(" - iface->super.super.gid_info.gid.raw: ");
+        print_gid_raw(iface->super.super.gid_info.gid.raw);
+        
+        printf(" - ah_attr->grh.dgid.raw: ");
+        print_gid_raw(ah_attr->grh.dgid.raw);
+
+        if ((memcmp(topo_arr[i].src_gid_raw, iface->super.super.gid_info.gid.raw, 16) == 0 &&
+            memcmp(topo_arr[i].dst_gid_raw, ah_attr->grh.dgid.raw, 16) == 0) ||
+            (memcmp(topo_arr[i].dst_gid_raw, iface->super.super.gid_info.gid.raw, 16) == 0 && 
+            memcmp(topo_arr[i].src_gid_raw, ah_attr->grh.dgid.raw, 16) == 0)) {
+            printf("Match found: topo_arr[%d].src_gid_raw matches either gid_info or dgid\n", i);
             return 1;
         }
     }
 
+    printf("No match found.\n");
     return 0;
 }
 
@@ -445,13 +470,12 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
 
             if (iface->long_cable_config.length > 0) {
                 uint8_t dscp;
-                printf("Je rentre ici car je suis dans le cas de meta");
                 srand(time(NULL));
-                if (check_gid_in_table(iface, ah_attr, iface->long_cable_config.topo_arr, iface->long_cable_config.length)) { //check with Roei if it's not too long to do like that. Maybe another alogo ?
-                                                                                                                            // when I do it ? init ? critical ? or ask sergei/davendercccccbkbnbgudierrknrncljfkddvniijuvrudrtrkbj
-                                                                                                                            
+                if (check_gid_in_table(iface, ah_attr, iface->long_cable_config.topo_arr, iface->long_cable_config.length)) {
+                    printf("Je suis dans un long cable - if is roce v2");                                                                                               
                     dscp = (rand() % 32) + 32;
                 } else {
+                    printf("Je suis dans un regular cable - if is roce v2");
                     dscp = rand() % 32;
                 }
 

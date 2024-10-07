@@ -20,6 +20,8 @@
 
 #include "rc_mlx5.inl"
 
+#define TOPO_CONFIG_FILE_GIDS 40
+
 
 enum {
     UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC,
@@ -721,6 +723,15 @@ uct_rc_mlx5_iface_subscribe_cqs(uct_rc_mlx5_iface_common_t *iface)
     return status;
 }
 
+int convert_gid_to_raw(const char *gid_str, uint8_t *raw_gid) {
+    if (inet_pton(AF_INET6, gid_str, raw_gid) != 1) {
+        printf("Error converting GID string to raw format: %s\n", gid_str);
+        return -1;
+    }
+
+    return 0;
+}
+
 void uct_rc_mlx5_parse_topo_file(uct_rc_mlx5_iface_common_t *iface, uct_rc_mlx5_iface_common_config_t *mlx5_config) {
     char buffer[256] = {};
     int len, i;
@@ -747,9 +758,23 @@ void uct_rc_mlx5_parse_topo_file(uct_rc_mlx5_iface_common_t *iface, uct_rc_mlx5_
 
     for (i = 0; i < len; i++)
     {
-        if (fgets(long_config[i].src_gid, UCS_IPV6_ADDR_LEN, file) == NULL || 
-            fgets(long_config[i].dst_gid, UCS_IPV6_ADDR_LEN, file) == NULL) {
+        if (fgets(buffer, sizeof(buffer), file) == NULL) {
             printf("Error reading GIDs from file\n");
+            fclose(file);
+            return;
+        }
+        
+        if (sscanf(buffer, "%39s  %39s", long_config[i].src_gid, long_config[i].dst_gid) != 2) {
+            printf("Error parsing line: %s\n", buffer);
+            fclose(file);
+            return;
+        }
+
+        long_config[i].src_gid[strcspn(long_config[i].src_gid, "\n")] = '\0';
+        long_config[i].dst_gid[strcspn(long_config[i].dst_gid, "\n")] = '\0';
+
+        if (convert_gid_to_raw(long_config[i].src_gid, long_config[i].src_gid_raw) != 0 ||
+            convert_gid_to_raw(long_config[i].dst_gid, long_config[i].dst_gid_raw) != 0) {
             fclose(file);
             return;
         }
@@ -757,7 +782,7 @@ void uct_rc_mlx5_parse_topo_file(uct_rc_mlx5_iface_common_t *iface, uct_rc_mlx5_
     
     iface->long_cable_config.length = len;
     iface->long_cable_config.topo_arr = long_config;
-
+    
     fclose(file);
 }
 

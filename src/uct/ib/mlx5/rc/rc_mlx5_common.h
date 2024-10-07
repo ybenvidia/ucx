@@ -6,6 +6,7 @@
 
 #ifndef UCT_RC_MLX5_COMMON_H
 #define UCT_RC_MLX5_COMMON_H
+#define GID_STRING_LENGTH 40
 
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/rc/base/rc_iface.h>
@@ -213,8 +214,10 @@ typedef struct uct_rc_mlx5_cmd_wq {
 } uct_rc_mlx5_cmd_wq_t;
 
 typedef struct {
-    char src_gid[UCS_IPV6_ADDR_LEN];
-    char dst_gid[UCS_IPV6_ADDR_LEN];
+    uint8_t			src_gid_raw[16];
+    uint8_t			dst_gid_raw[16];
+    char            src_gid[GID_STRING_LENGTH];
+    char            dst_gid[GID_STRING_LENGTH];
 } uct_rc_mlx5_long_file_config_t;
 
 
