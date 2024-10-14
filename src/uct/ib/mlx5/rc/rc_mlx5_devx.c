@@ -472,11 +472,11 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
                 uint8_t dscp;
                 srand(time(NULL));
                 if (check_gid_in_table(iface, ah_attr, iface->long_cable_config.topo_arr, iface->long_cable_config.length)) {
-                    printf("Je suis dans un long cable - if is roce v2");                                                                                               
-                    dscp = (rand() % 32) + 32;
+                    printf("long cable - if is roce v2");                                                                                               
+                    dscp = 6;
                 } else {
-                    printf("Je suis dans un regular cable - if is roce v2");
-                    dscp = rand() % 32;
+                    printf("regular cable - if is roce v2");
+                    dscp = 46;
                 }
 
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp, dscp);
@@ -513,9 +513,9 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
                 uint8_t dscp;
                 srand(time(NULL));
                 if (check_gid_in_table(iface, ah_attr, iface->long_cable_config.topo_arr, iface->long_cable_config.length)) {
-                    dscp = rand() % 32;
+                    dscp = 5;
                 } else {
-                    dscp =  (rand() % 32) + 32;
+                    dscp =  45;
                 }
 
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass, dscp);
