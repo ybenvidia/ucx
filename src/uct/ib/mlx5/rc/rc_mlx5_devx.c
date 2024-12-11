@@ -393,28 +393,14 @@ void print_gid_raw(const uint8_t raw[16]) {
 
 int check_gid_in_table(uct_rc_mlx5_iface_common_t *iface, struct ibv_ah_attr *ah_attr, uct_rc_mlx5_long_file_config_t *topo_arr, uint16_t length) {
     for (uint16_t i = 0; i < length; i++) {
-        printf("Checking topo_arr[%d]:\n", i);
-        printf(" - topo_arr[i].src_gid_raw: ");
-        print_gid_raw(topo_arr[i].src_gid_raw);
-        printf(" - topo_arr[i].dst_gid_raw: ");
-        print_gid_raw(topo_arr[i].dst_gid_raw);
-        
-        printf(" - iface->super.super.gid_info.gid.raw: ");
-        print_gid_raw(iface->super.super.gid_info.gid.raw);
-        
-        printf(" - ah_attr->grh.dgid.raw: ");
-        print_gid_raw(ah_attr->grh.dgid.raw);
-
         if ((memcmp(topo_arr[i].src_gid_raw, iface->super.super.gid_info.gid.raw, 16) == 0 &&
             memcmp(topo_arr[i].dst_gid_raw, ah_attr->grh.dgid.raw, 16) == 0) ||
             (memcmp(topo_arr[i].dst_gid_raw, iface->super.super.gid_info.gid.raw, 16) == 0 && 
             memcmp(topo_arr[i].src_gid_raw, ah_attr->grh.dgid.raw, 16) == 0)) {
-            printf("Match found: topo_arr[%d].src_gid_raw matches either gid_info or dgid\n", i);
             return 1;
         }
     }
 
-    printf("No match found.\n");
     return 0;
 }
 
@@ -470,12 +456,9 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
 
             if (iface->long_cable_config.length > 0) {
                 uint8_t dscp;
-                srand(time(NULL));
                 if (check_gid_in_table(iface, ah_attr, iface->long_cable_config.topo_arr, iface->long_cable_config.length)) {
-                    printf("long cable - if is roce v2");                                                                                               
                     dscp = 36;
                 } else {
-                    printf("regular cable - if is roce v2");
                     dscp = 24;
                 }
 
@@ -511,7 +494,6 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
 
             if (iface->long_cable_config.length > 0) {
                 uint8_t dscp;
-                srand(time(NULL));
                 if (check_gid_in_table(iface, ah_attr, iface->long_cable_config.topo_arr, iface->long_cable_config.length)) {
                     dscp = 36;
                 } else {
