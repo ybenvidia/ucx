@@ -381,16 +381,6 @@ void uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
     uct_ib_mlx5_md_buf_free(md, srq->buf, &srq->devx.mem);
 }
 
-void print_gid_raw(const uint8_t raw[16]) {
-    for (int i = 0; i < 16; i++) {
-        printf("%02x", raw[i]);
-        if (i % 2 == 1 && i < 15) {
-            printf(":");
-        }
-    }
-    printf("\n");
-}
-
 int check_gid_in_table(uct_rc_mlx5_iface_common_t *iface, struct ibv_ah_attr *ah_attr, uct_rc_mlx5_long_file_config_t *topo_arr, uint16_t length) {
     for (uint16_t i = 0; i < length; i++) {
         if ((memcmp(topo_arr[i].src_gid_raw, iface->super.super.gid_info.gid.raw, 16) == 0 &&
