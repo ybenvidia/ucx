@@ -410,6 +410,7 @@ typedef struct uct_rc_mlx5_iface_common {
         uct_rc_mlx5_srq_topo_t         srq_topo;
         uint8_t                        log_ack_req_freq;
     } config;
+    uint8_t                        collectives_prio_dscp;
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;
 
@@ -710,12 +711,12 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
 ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
         uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_qp_t *qp,
         uint32_t dest_qp_num, struct ibv_ah_attr *ah_attr,
-        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic);
+        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic, ...);
 #else
 static UCS_F_MAYBE_UNUSED ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
         uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_qp_t *qp,
         uint32_t dest_qp_num, struct ibv_ah_attr *ah_attr,
-        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic)
+        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic, ...)
 {
     return UCS_ERR_UNSUPPORTED;
 }

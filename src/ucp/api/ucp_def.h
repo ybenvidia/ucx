@@ -761,6 +761,7 @@ typedef struct ucp_ep_params {
      */
     ucs_sock_addr_t         local_sockaddr;
 
+    uint8_t                 collectives_prio_dscp;
 } ucp_ep_params_t;
 
 
