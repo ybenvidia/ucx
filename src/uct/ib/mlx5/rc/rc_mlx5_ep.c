@@ -725,7 +725,8 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
 
-    uint8_t collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
+    uint8_t collectives_prio_dscp;
+    collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
     va_list args;
     va_start(args, path_index);
     if (args != NULL) {

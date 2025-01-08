@@ -387,7 +387,8 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
         enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic, ...) 
 {
 
-    uint8_t collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP; 
+    uint8_t collectives_prio_dscp;
+    collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
     va_list args;
     va_start(args, max_rd_atomic);
     if (args != NULL) {
