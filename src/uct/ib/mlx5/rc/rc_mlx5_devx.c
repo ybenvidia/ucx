@@ -391,7 +391,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
     va_list args;
     va_start(args, max_rd_atomic);
     if (args != NULL) {
-        collectives_prio_dscp = va_arg(args, uint8_t);
+        collectives_prio_dscp = va_arg(args, int);
     }
     va_end(args);
 

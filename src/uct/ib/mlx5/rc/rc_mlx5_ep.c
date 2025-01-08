@@ -729,7 +729,7 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     va_list args;
     va_start(args, path_index);
     if (args != NULL) {
-        collectives_prio_dscp = va_arg(args, uint8_t);  // Fetch optional parameter if provided
+        collectives_prio_dscp = va_arg(args, int);
     }
     va_end(args);
 
