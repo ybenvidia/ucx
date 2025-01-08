@@ -983,7 +983,9 @@ enum uct_ep_params_field {
     UCT_EP_PARAM_FIELD_DEV_ADDR_LENGTH            = UCS_BIT(17),
 
     /** Enables @ref uct_ep_params::iface_addr_length */
-    UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH          = UCS_BIT(18)
+    UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH          = UCS_BIT(18),
+
+    UCT_EP_PARAM_FIELD_COLLECTIVES_PRIO           = UCS_BIT(19)
 };
 
 
