@@ -388,7 +388,6 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
 {
 
     uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
-
     char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]   = {};
     char out_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_out)] = {};
     char in_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_in)]    = {};
@@ -401,14 +400,14 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
     struct ibv_ah *ah;
     void *qpc;
 
-    uint8_t collectives_prio_dscp;
-    va_list args;
-    collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
-    va_start(args, max_rd_atomic);
-    if (args != NULL) {
-        collectives_prio_dscp = va_arg(args, int);
-    }
-    va_end(args);
+    // uint8_t collectives_prio_dscp;
+    // va_list args;
+    // collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
+    // va_start(args, max_rd_atomic);
+    // if (args != NULL) {
+    //     collectives_prio_dscp = va_arg(args, int);
+    // }
+    // va_end(args);
 
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opcode,
                       UCT_IB_MLX5_CMD_OP_INIT2RTR_QP);
@@ -445,7 +444,10 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
                               ah_attr->dlid);
 
-            UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp, collectives_prio_dscp);
+            UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
+                              uct_ib_iface_roce_dscp(&iface->super.super));
+
+            // UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp, collectives_prio_dscp);
         }
 
         uct_ib_mlx5_devx_set_qpc_port_affinity(md, path_index, qpc,
@@ -468,7 +470,10 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
                    UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
             /* TODO add flow_label support */
 
-            UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass, collectives_prio_dscp);
+            UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass,
+                              iface->super.super.config.traffic_class);
+
+            // UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass, collectives_prio_dscp);
         }
     }
 

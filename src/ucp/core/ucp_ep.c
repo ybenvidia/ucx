@@ -621,7 +621,7 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
         ep->flags |= UCP_EP_FLAG_USER_DATA_PARAM;
     }
 
-    ep->collectives_prio_dscp = params->collectives_prio_dscp;
+    // ep->collectives_prio_dscp = params->collectives_prio_dscp;
     return UCS_OK;
 }
 

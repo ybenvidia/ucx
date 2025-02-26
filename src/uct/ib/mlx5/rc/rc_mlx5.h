@@ -42,7 +42,7 @@ typedef struct uct_rc_mlx5_base_ep {
     struct {
         uct_ib_mlx5_txwq_t   wq;
     } tx;
-    uint8_t collectives_prio_dscp;
+    // uint8_t collectives_prio_dscp;
 } uct_rc_mlx5_base_ep_t;
 
 
