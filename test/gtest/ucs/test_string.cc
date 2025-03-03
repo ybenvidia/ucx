@@ -64,9 +64,10 @@ UCS_TEST_F(test_string, common_prefix_len) {
 }
 
 UCS_TEST_F(test_string, path) {
-    char path[PATH_MAX];
-    ucs_path_get_common_parent("/sys/dev/one", "/sys/dev/two", path);
-    EXPECT_STREQ("/sys/dev", path);
+    std::string path(PATH_MAX, '\0');
+
+    ucs_path_get_common_parent("/sys/dev/one", "/sys/dev/two", &path[0]);
+    EXPECT_STREQ("/sys/dev", path.c_str());
 
     EXPECT_EQ(4, ucs_path_calc_distance("/root/foo/bar", "/root/charlie/fox"));
     EXPECT_EQ(2, ucs_path_calc_distance("/a/b/c/d", "/a/b/c/e"));
@@ -308,6 +309,20 @@ UCS_TEST_F(test_string_buffer, flags) {
     /* coverity[overrun-buffer-val] */
     ucs_string_buffer_append_flags(&strb, UCS_BIT(1) | UCS_BIT(3), flag_names);
     EXPECT_EQ(std::string("one|three"), ucs_string_buffer_cstr(&strb));
+}
+
+UCS_TEST_F(test_string_buffer, array) {
+    static const char *str_array[] = {"once", "upon", "a", "time"};
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+    ucs_string_buffer_append_array(&strb, " ", "%s", str_array,
+                                   ucs_static_array_size(str_array));
+    EXPECT_EQ(std::string("once upon a time"), ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_reset(&strb);
+    static int num_array[] = {1, 2, 3, 4};
+    ucs_string_buffer_append_array(&strb, ",", "%d", num_array,
+                                   ucs_static_array_size(num_array));
+    EXPECT_EQ(std::string("1,2,3,4"), ucs_string_buffer_cstr(&strb));
 }
 
 UCS_TEST_F(test_string_buffer, dump) {

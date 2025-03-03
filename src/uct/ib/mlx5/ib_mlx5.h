@@ -195,30 +195,21 @@ enum {
     UCT_IB_MLX5_MD_FLAG_CQE128_ZIP           = UCS_BIT(11),
     /* Device performance is optimized when RDMA_WRITE is not used */
     UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED = UCS_BIT(12),
-    /* Device supports indirect xgvmi MR. This flag is removed if xgvmi access
-     * command fails */
-    UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI       = UCS_BIT(13),
     /* Device supports symmetric key creation */
-    UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE = UCS_BIT(14),
+    UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE = UCS_BIT(13),
     /* Device supports DMA MMO */
-    UCT_IB_MLX5_MD_FLAG_MMO_DMA              = UCS_BIT(15),
+    UCT_IB_MLX5_MD_FLAG_MMO_DMA              = UCS_BIT(14),
     /* Device supports XGVMI UMR workflow */
-    UCT_IB_MLX5_MD_FLAG_XGVMI_UMR            = UCS_BIT(16),
+    UCT_IB_MLX5_MD_FLAG_XGVMI_UMR            = UCS_BIT(15),
     /* Device supports UAR WC allocation type */
-    UCT_IB_MLX5_MD_FLAG_UAR_USE_WC           = UCS_BIT(17),
+    UCT_IB_MLX5_MD_FLAG_UAR_USE_WC           = UCS_BIT(16),
     /* Device supports implicit ODP with PCI relaxed order */
-    UCT_IB_MLX5_MD_FLAG_GVA_RO               = UCS_BIT(18),
-    /* RoCE supports out-of-order RDMA for RC */
-    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_RC = UCS_BIT(19),
-    /* RoCE supports out-of-order RDMA for DC */
-    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_OOO_RW_DC = UCS_BIT(20),
-    /* RoCE supports forcing ordering configuration */
-    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE     = UCS_BIT(21),
-    /* Device supports DDP (OOO data placement)*/
-    UCT_IB_MLX5_MD_FLAG_DDP                   = UCS_BIT(22),
+    UCT_IB_MLX5_MD_FLAG_GVA_RO               = UCS_BIT(17),
+    /* Device supports forcing ordering configuration */
+    UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE    = UCS_BIT(18),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 23,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 20,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -307,13 +298,14 @@ typedef struct {
 typedef struct {
     struct mlx5dv_devx_obj *cross_mr;
     uint32_t               lkey;
+    uint64_t               md_uuid;
 } uct_ib_mlx5_devx_umr_alias_t;
 
 
-#define UCT_IB_MLX5_UMR_ALIAS_FMT "UMR mkey alias %p index 0x%x"
+#define UCT_IB_MLX5_UMR_ALIAS_FMT "UMR mkey alias %p index 0x%x uuid %" PRIu64
 #define UCT_IB_MLX5_UMR_ALIAS_ARG(_umr_alias) \
-    (_umr_alias)->cross_mr, uct_ib_mlx5_mkey_index((_umr_alias)->lkey)
-
+    (_umr_alias)->cross_mr, uct_ib_mlx5_mkey_index((_umr_alias)->lkey), \
+    (_umr_alias)->md_uuid
 
 /* Hash map of indirect mkey (from the host) to mkey alias (on the DPU) */
 /* Note the hash key here is: gvmi_id << 32 | mkey (both uint32_t) */
@@ -325,7 +317,6 @@ typedef struct {
     void                        *address;
     struct mlx5dv_devx_obj      *atomic_dvmr;
     struct mlx5dv_devx_obj      *indirect_dvmr;
-    struct mlx5dv_devx_umem     *umem;
     struct mlx5dv_devx_obj      *cross_mr;
     uct_ib_mlx5_devx_umr_mkey_t *exported_umr_mkey;
     struct mlx5dv_devx_obj      *smkey_mr;
@@ -392,6 +383,16 @@ KHASH_MAP_INIT_INT(rkeys, uct_ib_mlx5_mem_lru_entry_t*);
 #endif
 
 
+typedef enum {
+    /* IBTA-compliant ordering semantics */
+    UCT_IB_MLX5_DP_ORDERING_IBTA    = 0x0,
+    /* Out-of-order RDMA reads and writes */
+    UCT_IB_MLX5_DP_ORDERING_OOO_RW  = 0x1,
+    /* Out-of-order RDMA read/write/send/recv (DDP) */
+    UCT_IB_MLX5_DP_ORDERING_OOO_ALL = 0x2,
+} uct_ib_mlx5_dp_ordering_t;
+
+
 /**
  * MLX5 IB memory domain.
  */
@@ -437,6 +438,12 @@ typedef struct uct_ib_mlx5_md {
     uint8_t                  max_rd_atomic_dc;
     uint8_t                  log_max_dci_stream_channels;
     uint32_t                 smkey_index;
+    struct {
+        /* Max dp ordering level per transport, 
+           as listed in uct_ib_mlx5_dp_ordering_t */
+        uint8_t              rc;
+        uint8_t              dc;
+    } dp_ordering_cap;
 } uct_ib_mlx5_md_t;
 
 
@@ -971,17 +978,27 @@ uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
                              void *out, size_t outlen,
                              char *msg_arg, int silent)
 {
-    ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+    ucs_log_level_t level;
+    ucs_status_t status;
     int ret;
     unsigned syndrome;
 
+    memset(out, 0, outlen);
     ret = mlx5dv_devx_general_cmd(context, in, inlen, out, outlen);
     if (ret != 0) {
+        if ((errno == EPERM) || (errno == EPROTONOSUPPORT) ||
+            (errno == EOPNOTSUPP)) {
+            status = UCS_ERR_UNSUPPORTED;
+        } else {
+            status = UCS_ERR_IO_ERROR;
+        }
+
         syndrome = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome);
+        level    = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
         ucs_log(level,
                 "mlx5dv_devx_general_cmd(%s) failed on %s, syndrome 0x%x: %m",
                 msg_arg, ibv_get_device_name(context->device), syndrome);
-        return UCS_ERR_IO_ERROR;
+        return status;
     }
 
     return UCS_OK;
@@ -991,9 +1008,6 @@ uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
 ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
                                                 uint8_t port_num,
                                                 uint16_t *ooo_sl_mask_p);
-
-void uct_ib_mlx5_devx_set_qpc_dp_ordering(
-        void *qpc, ucs_ternary_auto_value_t dp_ordering_ooo);
 
 void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,
                                             uint8_t path_index, void *qpc,
@@ -1152,9 +1166,25 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
                          const uct_md_mem_reg_params_t *params,
                          uct_mem_h *memh_p);
 
+/**
+ * Check if the device capabilities declare XGVMI support.
+ * This function detects whether device supports XGVMI, but there is no way to
+ * detect whether XGVMI works with indirect mkeys. Currently we only support
+ * XGVMI with indirect mkeys.
+ * TODO: FW should expose this capability
+ */
+int uct_ib_mlx5_devx_check_xgvmi(void *cap_2);
+
 ucs_status_t
 uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
                            const uct_md_mem_dereg_params_t *params);
+
+ucs_status_t uct_ib_mlx5_devx_query_cap(struct ibv_context *ctx, uint32_t opmod,
+                                        void *out, size_t size, char *msg_arg,
+                                        int silent);
+
+ucs_status_t uct_ib_mlx5_devx_query_cap_2(struct ibv_context *ctx,
+                                          void *out, size_t size);
 
 ucs_status_t
 uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md, const void *mkey_buffer,
@@ -1167,9 +1197,12 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                            const uct_md_mkey_pack_params_t *params,
                            void *mkey_buffer);
 
-ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
-                                      const uct_ib_md_config_t *md_config,
-                                      uct_ib_md_t **p_md);
+struct ibv_context* uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device);
+
+ucs_status_t uct_ib_mlx5_devx_md_open_common(const char* name, size_t size,
+                                             struct ibv_device *ibv_device,
+                                             const uct_ib_md_config_t *md_config,
+                                             uct_ib_md_t **p_md);
 
 ucs_status_t uct_ib_mlx5_devx_reg_exported_key(uct_ib_mlx5_md_t *md,
                                                uct_ib_mlx5_devx_mem_t *memh);

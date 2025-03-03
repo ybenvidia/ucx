@@ -197,17 +197,17 @@ try_load_cuda_env() {
     then
         az_module_load dev/gdrcopy2.4.1_cuda12.5.1 && have_gdrcopy=yes
     fi
-
-    # Set CUDA_VISIBLE_DEVICES
-    if [ -n "${worker}" ]
-    then
-        export CUDA_VISIBLE_DEVICES=$((worker % num_gpus))
-    fi
 }
 
 load_cuda_env() {
     try_load_cuda_env
-    [ "${have_cuda}" == "yes" ] || azure_log_error "Cuda device is not available"
+    if [ "${have_cuda}" != "yes" ] ; then
+        if [ "${ucx_gpu}" = "yes" ] ; then
+            azure_log_error "CUDA load failed on GPU node $(hostname -s)"
+            exit 1
+        fi
+        azure_log_warning "Cuda device is not available"
+    fi
 }
 
 check_release_build() {
@@ -290,4 +290,8 @@ git_clone_with_retry() {
 
     echo "Failed to clone UCX after $max_attempts attempts"
     return 1
+}
+
+setup_go_env() {
+    go env -w GO111MODULE=auto
 }

@@ -154,8 +154,6 @@ public:
                               sender().ucph()->cache_md_map[memh1->mem_type];
         ucp_md_index_t md_index;
 
-        EXPECT_NE(memh1->md_map, 0);
-
         ucs_for_each_bit(md_index, md_map) {
             if (equal || (m_always_equal_md_map & UCS_BIT(md_index))) {
                 EXPECT_EQ(memh2->uct[md_index], memh1->uct[md_index]);
@@ -1025,6 +1023,16 @@ UCS_TEST_P(test_ucp_mmap, gva, "GVA_ENABLE=y")
     }
 }
 
+UCS_TEST_P(test_ucp_mmap, rndv_mpool_mdesc_no_rcache)
+{
+    ucp_worker_h worker = sender().worker();
+    for (auto mem_type : mem_buffer::supported_mem_types()) {
+        ucp_mem_desc_t *mdesc = ucp_rndv_mpool_get(worker, mem_type,
+                                                   UCS_SYS_DEVICE_ID_UNKNOWN);
+        EXPECT_EQ(mdesc->memh, mdesc->memh->parent);
+        ucs_mpool_put(mdesc);
+    }
+}
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap)
 

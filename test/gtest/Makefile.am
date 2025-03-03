@@ -151,6 +151,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_mem_type.cc \
 	ucp/test_ucp_perf.cc \
 	ucp/test_ucp_proto.cc \
+	ucp/test_ucp_proto_mock.cc \
 	ucp/test_ucp_ep_reconfig.cc \
 	ucp/test_ucp_rma.cc \
 	ucp/test_ucp_rma_mt.cc \
@@ -259,6 +260,7 @@ if HAVE_CUDA
 gtest_SOURCES += \
 	common/cuda_context.cc \
 	ucm/cuda_hooks.cc \
+	uct/cuda/test_switch_cuda_device.cc \
 	uct/cuda/test_cuda_ipc_md.cc
 gtest_CPPFLAGS += \
 	$(CUDA_CPPFLAGS)

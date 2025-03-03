@@ -594,6 +594,8 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
     remaining = (uintptr_t)req->send.buffer % align;
 
     if ((offset == 0) && (remaining > 0) && (req->send.length > ucp_mtu)) {
+        ucs_assertv(ucp_mtu > remaining, "ucp_mtu %lu, remaining %lu",
+                    ucp_mtu, remaining);
         length = ucp_mtu - remaining;
     } else {
         lanes_count = ucs_popcount(req->send.rndv.zcopy.lanes_map_all);
@@ -1127,7 +1129,7 @@ ucs_mpool_ops_t ucp_frag_mpool_ops = {
     .chunk_alloc   = ucp_frag_mpool_malloc,
     .chunk_release = ucp_frag_mpool_free,
     .obj_init      = ucp_frag_mpool_obj_init,
-    .obj_cleanup   = ucs_empty_function
+    .obj_cleanup   = (ucs_mpool_obj_cleanup_func_t)ucs_empty_function
 };
 
 ucp_mem_desc_t *
