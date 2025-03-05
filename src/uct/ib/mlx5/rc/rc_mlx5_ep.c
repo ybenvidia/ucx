@@ -732,20 +732,20 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
 
-    // uint8_t collectives_prio_dscp;
-    // va_list args;
-    // collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
-    // va_start(args, path_index);
-    // if (args != NULL) {
-    //     collectives_prio_dscp = va_arg(args, int);
-    // }
-    // va_end(args);
+    uint8_t collectives_prio_dscp;
+    va_list args;
+    collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
+    va_start(args, path_index);
+    if (args != NULL) {
+        collectives_prio_dscp = va_arg(args, int);
+    }
+    va_end(args);
 
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
         return uct_rc_mlx5_iface_common_devx_connect_qp(
                 iface, qp, qp_num, ah_attr, path_mtu, path_index,
-                iface->super.config.max_rd_atomic); //, collectives_prio_dscp
+                iface->super.config.max_rd_atomic, collectives_prio_dscp);
     } else {
         return uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num,
                                        ah_attr, path_mtu);
@@ -821,7 +821,7 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
 
     status = uct_rc_mlx5_ep_connect_qp(iface, &ep->super.tx.wq.super, qp_num,
                                        &ah_attr, path_mtu,
-                                       ep->super.super.path_index); //, &ep->super.collectives_prio_dscp
+                                       ep->super.super.path_index, &ep->super.collectives_prio_dscp);
     if (status != UCS_OK) {
         return status;
     }
@@ -1073,7 +1073,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     uct_rc_mlx5_iface_common_prepost_recvs(iface);
-    //self->collectives_prio_dscp = params->collectives_prio_dscp;
+    self->collectives_prio_dscp = params->collectives_prio_dscp;
     return UCS_OK;
 
 err_event_unreg:
