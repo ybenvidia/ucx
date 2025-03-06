@@ -1042,8 +1042,8 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
     uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE      |
                                UCT_EP_PARAM_FIELD_DEV_ADDR   |
                                UCT_EP_PARAM_FIELD_IFACE_ADDR |
-                               UCT_EP_PARAM_FIELD_PATH_INDEX;
-                               | UCT_EP_PARAM_FIELD_COLLECTIVES_PRIO;
+                               UCT_EP_PARAM_FIELD_PATH_INDEX |
+                               UCT_EP_PARAM_FIELD_COLLECTIVES_PRIO;
     uct_ep_params.iface      = wiface->iface;
     uct_ep_params.dev_addr   = address->dev_addr;
     uct_ep_params.iface_addr = address->iface_addr;
