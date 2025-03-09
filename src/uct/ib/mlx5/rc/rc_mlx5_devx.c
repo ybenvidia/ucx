@@ -404,9 +404,11 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
     va_list args;
     collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
     va_start(args, max_rd_atomic);
-    if (args != NULL) {
-        collectives_prio_dscp = va_arg(args, int);
+    collectives_prio_dscp = va_arg(args, int);
+    if (!collectives_prio_dscp) {
+        collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
     }
+    
     va_end(args);
 
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opcode,
@@ -474,6 +476,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
                    UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
             /* TODO add flow_label support */
 
+            printf("Le dscp est: %d", collectives_prio_dscp);
             if (collectives_prio_dscp != DEFAULT_COLLECTIVES_PRIO_DSCP) {
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass, collectives_prio_dscp);
             } else {
