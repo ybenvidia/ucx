@@ -444,6 +444,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
                               ah_attr->dlid);
 
+            printf("Le dscp est: %d", collectives_prio_dscp);
             if (collectives_prio_dscp != DEFAULT_COLLECTIVES_PRIO_DSCP) {
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp, collectives_prio_dscp);
             } else {
