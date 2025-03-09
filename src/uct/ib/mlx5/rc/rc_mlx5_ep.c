@@ -736,8 +736,9 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     va_list args;
     collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
     va_start(args, path_index);
-    if (args != NULL) {
-        collectives_prio_dscp = va_arg(args, int);
+    collectives_prio_dscp = va_arg(args, int);
+    if (!collectives_prio_dscp) {
+        collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
     }
     va_end(args);
 

@@ -384,7 +384,7 @@ void uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
 ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
         uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_qp_t *qp,
         uint32_t dest_qp_num, struct ibv_ah_attr *ah_attr,
-        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic, ...) 
+        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic, uint8_t collectives_prio_dscp) 
 {
 
     uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
@@ -399,17 +399,6 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
     ucs_status_t status;
     struct ibv_ah *ah;
     void *qpc;
-
-    uint8_t collectives_prio_dscp;
-    va_list args;
-    collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
-    va_start(args, max_rd_atomic);
-    collectives_prio_dscp = va_arg(args, int);
-    if (!collectives_prio_dscp) {
-        collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
-    }
-    
-    va_end(args);
 
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opcode,
                       UCT_IB_MLX5_CMD_OP_INIT2RTR_QP);
