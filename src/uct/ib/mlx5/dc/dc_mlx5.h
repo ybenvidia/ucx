@@ -56,6 +56,17 @@ struct ibv_ravh {
     }
 
 
+/*
+ * Iterate over all valid DCIs in the iface.
+ * In random policy, for example, DCIs are not allocated consecutively.
+ */
+#define uct_dc_iface_for_each_valid_dci(_dci_index, _dci, _iface) \
+    for (_dci_index = 0; _dci_index < ucs_array_length(&(_iface)->tx.dcis); \
+         _dci_index++) \
+        if (uct_dc_mlx5_is_dci_valid( \
+                    _dci = uct_dc_mlx5_iface_dci(_iface, _dci_index)))
+
+
 typedef struct uct_dc_mlx5_ep     uct_dc_mlx5_ep_t;
 typedef struct uct_dc_mlx5_iface  uct_dc_mlx5_iface_t;
 typedef uint16_t                  uct_dci_index_t;
@@ -401,7 +412,8 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
 
 ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
                                           uct_dci_index_t dci_index,
-                                          uint8_t num_dci_channels);
+                                          uint8_t num_dci_channels,
+                                          uct_dc_dci_t **dci_p);
 
 ucs_status_t uct_dc_mlx5_iface_resize_and_fill_dcis(uct_dc_mlx5_iface_t *iface,
                                                     uint16_t size);
@@ -418,7 +430,7 @@ uct_dc_mlx5_dci_pool_get_or_create(uct_dc_mlx5_iface_t *iface,
 uint32_t
 uct_dc_mlx5_dci_config_hash(const uct_dc_mlx5_dci_config_t *dci_config);
 
-void uct_dc_mlx5_destroy_dci(uct_dc_mlx5_iface_t *iface, uint16_t dci_index);
+void uct_dc_mlx5_destroy_dci(uct_dc_mlx5_iface_t *iface, uct_dc_dci_t *dci);
 
 static UCS_F_ALWAYS_INLINE uint8_t uct_dc_mlx5_is_dci_valid(const uct_dc_dci_t *dci)
 {
@@ -428,6 +440,9 @@ static UCS_F_ALWAYS_INLINE uint8_t uct_dc_mlx5_is_dci_valid(const uct_dc_dci_t *
 static UCS_F_ALWAYS_INLINE uct_dc_dci_t *
 uct_dc_mlx5_iface_dci(uct_dc_mlx5_iface_t *iface, uct_dci_index_t dci_index)
 {
+    ucs_assertv(dci_index < ucs_array_length(&iface->tx.dcis),
+                "dci_index=%d dcis_length=%d", dci_index,
+                ucs_array_length(&iface->tx.dcis));
     return ucs_array_elem(&iface->tx.dcis, dci_index);
 }
 
@@ -484,10 +499,9 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_ravh *ravh, uint32_t dct_num)
 static UCS_F_ALWAYS_INLINE uct_dci_index_t
 uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, struct mlx5_cqe64 *cqe)
 {
-    uint32_t qp_num;
-    int ndci;
     uct_dci_index_t dci_index;
     uct_dc_dci_t *dci;
+    uint32_t qp_num;
 
     if (ucs_likely(iface->flags & UCT_DC_MLX5_IFACE_FLAG_UIDX)) {
         dci_index = cqe->srqn_uidx >> UCT_IB_UIDX_SHIFT;
@@ -498,11 +512,8 @@ uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, struct mlx5_cqe64 *cqe)
     }
 
     qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    ndci   = ucs_array_length(&iface->tx.dcis);
-    for (dci_index = 0; dci_index < ndci; dci_index++) {
-        dci = uct_dc_mlx5_iface_dci(iface, dci_index);
-        if (uct_dc_mlx5_is_dci_valid(dci) &&
-            (dci->txwq.super.qp_num == qp_num)) {
+    uct_dc_iface_for_each_valid_dci(dci_index, dci, iface) {
+        if (dci->txwq.super.qp_num == qp_num) {
             return dci_index;
         }
     }
