@@ -732,13 +732,13 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
 
-    uint8_t collectives_prio_dscp;
+    uint8_t dscp;
     va_list args;
-    collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
+    dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
     va_start(args, path_index);
-    collectives_prio_dscp = va_arg(args, int);
-    if (!collectives_prio_dscp) {
-        collectives_prio_dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
+    dscp = (uint8_t)va_arg(args, int);
+    if (!dscp) {
+        dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
     }
     va_end(args);
 
@@ -746,7 +746,7 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
         return uct_rc_mlx5_iface_common_devx_connect_qp(
                 iface, qp, qp_num, ah_attr, path_mtu, path_index,
-                iface->super.config.max_rd_atomic, collectives_prio_dscp);
+                iface->super.config.max_rd_atomic, dscp);
     } else {
         return uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num,
                                        ah_attr, path_mtu);
@@ -822,7 +822,7 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
 
     status = uct_rc_mlx5_ep_connect_qp(iface, &ep->super.tx.wq.super, qp_num,
                                        &ah_attr, path_mtu,
-                                       ep->super.super.path_index, &ep->super.collectives_prio_dscp);
+                                       ep->super.super.path_index, &ep->super.dscp);
     if (status != UCS_OK) {
         return status;
     }
@@ -1074,7 +1074,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     uct_rc_mlx5_iface_common_prepost_recvs(iface);
-    self->collectives_prio_dscp = params->collectives_prio_dscp;
+    self->dscp = params->dscp;
     return UCS_OK;
 
 err_event_unreg:

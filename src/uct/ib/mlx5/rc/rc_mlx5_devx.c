@@ -384,7 +384,7 @@ void uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
 ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
         uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_qp_t *qp,
         uint32_t dest_qp_num, struct ibv_ah_attr *ah_attr,
-        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic, uint8_t collectives_prio_dscp) 
+        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic, uint8_t dscp) 
 {
 
     uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
@@ -435,9 +435,9 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
                               ah_attr->dlid);
 
-            printf("Le dscp est: %d", collectives_prio_dscp);
-            if (collectives_prio_dscp != DEFAULT_COLLECTIVES_PRIO_DSCP) {
-                UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp, collectives_prio_dscp);
+            printf("Le dscp est: %d", dscp);
+            if (dscp != DEFAULT_COLLECTIVES_PRIO_DSCP) {
+                UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp, dscp);
             } else {
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
                     uct_ib_iface_roce_dscp(&iface->super.super));
@@ -465,9 +465,9 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
                    UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
             /* TODO add flow_label support */
 
-            printf("Le dscp est: %d", collectives_prio_dscp);
-            if (collectives_prio_dscp != DEFAULT_COLLECTIVES_PRIO_DSCP) {
-                UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass, collectives_prio_dscp);
+            printf("Le dscp est: %d", dscp);
+            if (dscp != DEFAULT_COLLECTIVES_PRIO_DSCP) {
+                UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass, dscp);
             } else {
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass,
                     iface->super.super.config.traffic_class);

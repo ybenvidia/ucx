@@ -572,7 +572,7 @@ typedef struct ucp_ep {
     /* Transports for every lane */
     uct_ep_h                      uct_eps[UCP_MAX_FAST_PATH_LANES];
     ucp_ep_ext_t                  *ext;                   /* Endpoint extension */
-    uint8_t                       collectives_prio_dscp;
+    uint8_t                       dscp;
 
 #if ENABLE_DEBUG_DATA
     char                          peer_name[UCP_WORKER_ADDRESS_NAME_MAX];

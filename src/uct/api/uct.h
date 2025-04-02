@@ -1449,7 +1449,7 @@ struct uct_ep_params {
      */
     size_t                              iface_addr_length;
 
-    uint8_t                           collectives_prio_dscp;
+    uint8_t                             dscp;
 };
 
 
