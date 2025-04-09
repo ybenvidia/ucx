@@ -798,10 +798,10 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         /* For HW TM we need 2 QPs, one of which will be used by the device for
          * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
          * should be posted to the send side of the QP which is owned by device. */
-        printf("[uct_rc_mlx5_ep_connect_to_ep_v2] Je rentre dans ce if et le dscp vaut: %u\n", &ep->super.dscp);
+        printf("[uct_rc_mlx5_ep_connect_to_ep_v2] Je rentre dans ce if et le dscp vaut: %u\n", ep->super.dscp);
         status = uct_rc_mlx5_ep_connect_qp(
                 iface, &ep->tm_qp, uct_ib_unpack_uint24(rc_addr->super.qp_num),
-                &ah_attr, path_mtu, ep->super.super.path_index, &ep->super.dscp);
+                &ah_attr, path_mtu, ep->super.super.path_index, ep->super.dscp);
         if (status != UCS_OK) {
             return status;
         }
@@ -813,10 +813,10 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         qp_num = uct_ib_unpack_uint24(rc_addr->super.qp_num);
     }
 
-    printf("[uct_rc_mlx5_ep_connect_to_ep_v2] Je ne suis pas dans ce if et le dscp vaut: %u\n", &ep->super.dscp);
+    printf("[uct_rc_mlx5_ep_connect_to_ep_v2] Je ne suis pas dans ce if et le dscp vaut: %u\n", ep->super.dscp);
     status = uct_rc_mlx5_ep_connect_qp(iface, &ep->super.tx.wq.super, qp_num,
                                        &ah_attr, path_mtu,
-                                       ep->super.super.path_index, &ep->super.dscp);
+                                       ep->super.super.path_index, ep->super.dscp);
     if (status != UCS_OK) {
         return status;
     }
