@@ -626,8 +626,10 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
     if (params->field_mask & UCP_EP_PARAM_COLLECTIVES_PRIO_DSCP) {
         ep->dscp = params->dscp;
     } else {
-        ep->dscp = 0;
+        ep->dscp = -1;
     }
+
+    printf("[ucp_ep_adjust_params] ep->dscp set to: %u\n", ep->dscp);
     
     return UCS_OK;
 }
@@ -904,6 +906,10 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
     if (status != UCS_OK) {
         goto err_cleanup_lanes;
     }
+
+    printf("[ucp_ep_create] After adjust_params, ep->dscp = %u (from params->dscp = %u)\n",
+       ep->dscp,
+       (params->field_mask & UCP_EP_PARAM_COLLECTIVES_PRIO_DSCP) ? params->dscp : -1);
 
     status = ucp_ep_client_cm_connect_start(ep, params);
     if (status != UCS_OK) {

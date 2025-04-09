@@ -435,9 +435,10 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
                               ah_attr->dlid);
 
-            printf("Le dscp est: %d", dscp);
-            if (dscp != DEFAULT_COLLECTIVES_PRIO_DSCP) {
+            printf("[uct_rc_mlx5_iface_common_devx_connect_qp] dscp received: %u\n", dscp);
+            if (dscp < 0) {
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp, dscp);
+                printf("[uct_rc_mlx5_iface_common_devx_connect_qp] dscp programmed in QPC: %u\n", dscp);
             } else {
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
                     uct_ib_iface_roce_dscp(&iface->super.super));
@@ -465,9 +466,10 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
                    UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
             /* TODO add flow_label support */
 
-            printf("Le dscp est: %d", dscp);
-            if (dscp != DEFAULT_COLLECTIVES_PRIO_DSCP) {
+            printf("[uct_rc_mlx5_iface_common_devx_connect_qp] dscp received: %u\n", dscp);
+            if (dscp < 0) {
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass, dscp);
+                printf("[uct_rc_mlx5_iface_common_devx_connect_qp] dscp programmed in QPC: %u\n", dscp);
             } else {
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass,
                     iface->super.super.config.traffic_class);

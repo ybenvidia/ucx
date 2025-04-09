@@ -728,19 +728,11 @@ ucs_status_t
 uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
                           struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu,
-                          uint8_t path_index, ...)
+                          uint8_t path_index, uint8_t dscp)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
 
-    uint8_t dscp;
-    va_list args;
-    dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
-    va_start(args, path_index);
-    dscp = (uint8_t)va_arg(args, int);
-    if (!dscp) {
-        dscp = DEFAULT_COLLECTIVES_PRIO_DSCP;
-    }
-    va_end(args);
+    printf("[uct_rc_mlx5_ep_connect_qp] dscp passed in args: %u\n", dscp);
 
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
@@ -806,9 +798,10 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         /* For HW TM we need 2 QPs, one of which will be used by the device for
          * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
          * should be posted to the send side of the QP which is owned by device. */
+        printf("[uct_rc_mlx5_ep_connect_to_ep_v2] Je rentre dans ce if et le dscp vaut: %u\n", &ep->super.dscp);
         status = uct_rc_mlx5_ep_connect_qp(
                 iface, &ep->tm_qp, uct_ib_unpack_uint24(rc_addr->super.qp_num),
-                &ah_attr, path_mtu, ep->super.super.path_index);
+                &ah_attr, path_mtu, ep->super.super.path_index, &ep->super.dscp);
         if (status != UCS_OK) {
             return status;
         }
@@ -820,6 +813,7 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         qp_num = uct_ib_unpack_uint24(rc_addr->super.qp_num);
     }
 
+    printf("[uct_rc_mlx5_ep_connect_to_ep_v2] Je ne suis pas dans ce if et le dscp vaut: %u\n", &ep->super.dscp);
     status = uct_rc_mlx5_ep_connect_qp(iface, &ep->super.tx.wq.super, qp_num,
                                        &ah_attr, path_mtu,
                                        ep->super.super.path_index, &ep->super.dscp);

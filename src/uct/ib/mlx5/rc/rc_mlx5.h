@@ -6,7 +6,6 @@
 
 #ifndef UCT_RC_MLX5_H
 #define UCT_RC_MLX5_H
-#define DEFAULT_COLLECTIVES_PRIO_DSCP 0
 
 #include "rc_mlx5_common.h"
 
@@ -197,7 +196,7 @@ ucs_status_t
 uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
                           struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu,
-                          uint8_t path_index, ...);
+                          uint8_t path_index, uint8_t dscp);
 
 int uct_rc_mlx5_base_ep_is_connected(
         const uct_ep_h tl_ep, const uct_ep_is_connected_params_t *params);
