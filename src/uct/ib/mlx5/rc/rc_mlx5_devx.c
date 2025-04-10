@@ -436,7 +436,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
                               ah_attr->dlid);
 
             printf("[uct_rc_mlx5_iface_common_devx_connect_qp] dscp received: %u\n", dscp);
-            if (dscp < 0) {
+            if (dscp != -1) {
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp, dscp);
                 printf("[uct_rc_mlx5_iface_common_devx_connect_qp] dscp programmed in QPC: %u\n", dscp);
             } else {
