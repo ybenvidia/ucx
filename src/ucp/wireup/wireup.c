@@ -1079,7 +1079,7 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
     uct_ep_params.dev_addr   = address->dev_addr;
     uct_ep_params.iface_addr = address->iface_addr;
     uct_ep_params.path_index = path_index;
-    uct_ep_params.dscp = ep->dscp;
+    uct_ep_params.traffic_class = ep->traffic_class;
     status = uct_ep_create(&uct_ep_params, &uct_ep);
     if (status != UCS_OK) {
         /* coverity[leaked_storage] */

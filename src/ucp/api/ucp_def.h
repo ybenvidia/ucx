@@ -761,7 +761,7 @@ typedef struct ucp_ep_params {
      */
     ucs_sock_addr_t         local_sockaddr;
 
-    uint8_t                 dscp;
+    uint8_t                 traffic_class;
 } ucp_ep_params_t;
 
 

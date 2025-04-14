@@ -1449,7 +1449,7 @@ struct uct_ep_params {
      */
     size_t                              iface_addr_length;
 
-    uint8_t                             dscp;
+    uint8_t                             traffic_class;
 };
 
 

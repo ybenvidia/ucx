@@ -41,7 +41,7 @@ typedef struct uct_rc_mlx5_base_ep {
     struct {
         uct_ib_mlx5_txwq_t   wq;
     } tx;
-    uint8_t dscp;
+    uint8_t traffic_class;
 } uct_rc_mlx5_base_ep_t;
 
 
@@ -196,7 +196,7 @@ ucs_status_t
 uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
                           struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu,
-                          uint8_t path_index, uint8_t dscp);
+                          uint8_t path_index, uint8_t traffic_class);
 
 int uct_rc_mlx5_base_ep_is_connected(
         const uct_ep_h tl_ep, const uct_ep_is_connected_params_t *params);
