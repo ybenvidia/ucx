@@ -437,7 +437,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
 
             printf("[uct_rc_mlx5_iface_common_devx_connect_qp] traffic_class received: %u\n", traffic_class);
             if (traffic_class != -1) {
-                UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.traffic_class, traffic_class);
+                UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp, traffic_class);
                 printf("[uct_rc_mlx5_iface_common_devx_connect_qp] traffic_class programmed in QPC: %u\n", traffic_class);
             } else {
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
