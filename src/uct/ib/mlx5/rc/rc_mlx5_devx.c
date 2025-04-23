@@ -436,7 +436,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
                               ah_attr->dlid);
 
             printf("[uct_rc_mlx5_iface_common_devx_connect_qp] traffic_class received: %u\n", traffic_class);
-            if (traffic_class != -1) {
+            if (traffic_class != UCP_EP_NO_TCLASS) {
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp, traffic_class);
                 printf("[uct_rc_mlx5_iface_common_devx_connect_qp] traffic_class programmed in QPC: %u\n", traffic_class);
             } else {
@@ -467,7 +467,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
             /* TODO add flow_label support */
 
             printf("[uct_rc_mlx5_iface_common_devx_connect_qp] traffic_class received: %u\n", traffic_class);
-            if (traffic_class < 0) {
+            if (traffic_class != UCP_EP_NO_TCLASS) {
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass, traffic_class);
                 printf("[uct_rc_mlx5_iface_common_devx_connect_qp] traffic_class programmed in QPC: %u\n", traffic_class);
             } else {

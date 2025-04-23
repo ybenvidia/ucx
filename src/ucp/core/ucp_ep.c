@@ -626,7 +626,7 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
     if (params->field_mask & UCP_EP_PARAM_COLLECTIVES_PRIO_TRAFFIC_CLASS) {
         ep->traffic_class = params->traffic_class;
     } else {
-        ep->traffic_class = -1;
+        ep->traffic_class = UCP_EP_NO_TCLASS;
     }
 
     printf("[ucp_ep_adjust_params] ep->traffic_class set to: %u\n", ep->traffic_class);
