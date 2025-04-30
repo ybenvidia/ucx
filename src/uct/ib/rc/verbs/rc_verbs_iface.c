@@ -131,26 +131,6 @@ out:
     uct_rc_iface_arbiter_dispatch(iface);
 }
 
-static ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
-{
-    switch (status)
-    {
-    case IBV_WC_SUCCESS:
-        return UCS_OK;
-    case IBV_WC_REM_ACCESS_ERR:
-    case IBV_WC_REM_OP_ERR:
-        return UCS_ERR_CONNECTION_RESET;
-    case IBV_WC_RETRY_EXC_ERR:
-    case IBV_WC_RNR_RETRY_EXC_ERR:
-    case IBV_WC_REM_ABORT_ERR:
-        return UCS_ERR_ENDPOINT_TIMEOUT;
-    case IBV_WC_WR_FLUSH_ERR:
-        return UCS_ERR_CANCELED;
-    default:
-        return UCS_ERR_IO_ERROR;
-    }
-}
-
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 {
@@ -165,7 +145,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
                             uct_rc_verbs_ep_t);
         if (ucs_unlikely((wc[i].status != IBV_WC_SUCCESS) || (ep == NULL))) {
-            status = uct_rc_verbs_wc_to_ucs_status(wc[i].status);
+            status = uct_ib_wc_to_ucs_status(wc[i].status);
             iface->super.super.ops->handle_failure(&iface->super.super, &wc[i],
                                                    status);
             continue;
@@ -218,7 +198,6 @@ uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface,
                                                  uct_rc_verbs_iface_t);
-    uct_ib_md_t *md             = uct_ib_iface_md(&iface->super.super);
     ucs_status_t status;
 
     status = uct_rc_iface_query(&iface->super, iface_attr,
@@ -238,7 +217,7 @@ uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     /* Software overhead */
     iface_attr->overhead = UCT_RC_VERBS_IFACE_OVERHEAD;
 
-    iface_attr->ep_addr_len = uct_ib_md_is_flush_rkey_valid(md->flush_rkey) ?
+    iface_attr->ep_addr_len = uct_rc_iface_flush_rkey_enabled(&iface->super) ?
                                       sizeof(uct_rc_verbs_ep_flush_addr_t) :
                                       sizeof(uct_rc_verbs_ep_addr_t);
 
