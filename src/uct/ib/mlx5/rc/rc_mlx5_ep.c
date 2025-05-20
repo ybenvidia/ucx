@@ -728,17 +728,15 @@ ucs_status_t
 uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
                           struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu,
-                          uint8_t path_index, uint8_t traffic_class)
+                          uint8_t path_index, const uct_ep_connect_to_ep_params_t *params)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
-
-    printf("[uct_rc_mlx5_ep_connect_qp] traffic_class passed in args: %u\n", traffic_class);
 
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
         return uct_rc_mlx5_iface_common_devx_connect_qp(
                 iface, qp, qp_num, ah_attr, path_mtu, path_index,
-                iface->super.config.max_rd_atomic, traffic_class);
+                iface->super.config.max_rd_atomic, params);
     } else {
         return uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num,
                                        ah_attr, path_mtu);
@@ -794,14 +792,15 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                         &path_mtu);
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
 
+    printf("[uct_rc_mlx5_ep_connect_to_ep_v2] params->ep_traffic_class: %u\n", params->ep_traffic_class);
+
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         /* For HW TM we need 2 QPs, one of which will be used by the device for
          * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
          * should be posted to the send side of the QP which is owned by device. */
-        printf("[uct_rc_mlx5_ep_connect_to_ep_v2] Je rentre dans ce if et le traffic_class vaut: %u\n", ep->super.traffic_class);
         status = uct_rc_mlx5_ep_connect_qp(
                 iface, &ep->tm_qp, uct_ib_unpack_uint24(rc_addr->super.qp_num),
-                &ah_attr, path_mtu, ep->super.super.path_index, ep->super.traffic_class);
+                &ah_attr, path_mtu, ep->super.super.path_index, params);
         if (status != UCS_OK) {
             return status;
         }
@@ -813,10 +812,9 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         qp_num = uct_ib_unpack_uint24(rc_addr->super.qp_num);
     }
 
-    printf("[uct_rc_mlx5_ep_connect_to_ep_v2] Je ne suis pas dans ce if et le traffic_class vaut: %u\n", ep->super.traffic_class);
     status = uct_rc_mlx5_ep_connect_qp(iface, &ep->super.tx.wq.super, qp_num,
                                        &ah_attr, path_mtu,
-                                       ep->super.super.path_index, ep->super.traffic_class);
+                                       ep->super.super.path_index, params);
     if (status != UCS_OK) {
         return status;
     }
@@ -1068,7 +1066,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     uct_rc_mlx5_iface_common_prepost_recvs(iface);
-    self->traffic_class = params->traffic_class;
     return UCS_OK;
 
 err_event_unreg:

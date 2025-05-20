@@ -384,7 +384,8 @@ void uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
 ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
         uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_qp_t *qp,
         uint32_t dest_qp_num, struct ibv_ah_attr *ah_attr,
-        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic, uint8_t traffic_class) 
+        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic,
+        const uct_ep_connect_to_ep_params_t *params)
 {
 
     uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
@@ -435,15 +436,14 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
                               ah_attr->dlid);
 
-            printf("[uct_rc_mlx5_iface_common_devx_connect_qp] traffic_class received: %u\n", traffic_class);
-            if (traffic_class != UCP_EP_NO_TCLASS) {
-                UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp, traffic_class);
-                printf("[uct_rc_mlx5_iface_common_devx_connect_qp] traffic_class programmed in QPC: %u\n", traffic_class);
+            if (params && (params->field_mask & UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_TRAFFIC_CLASS)) {
+                printf("[uct_rc_mlx5_iface_common_devx_connect_qp] params->ep_traffic_class: %u\n", params->ep_traffic_class);
+                UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass,
+                                 params->ep_traffic_class);
             } else {
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
-                    uct_ib_iface_roce_dscp(&iface->super.super));
+                                 uct_ib_iface_roce_dscp(&iface->super.super));
             }
-            
         }
 
         uct_ib_mlx5_devx_set_qpc_port_affinity(md, path_index, qpc,
@@ -465,14 +465,13 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
                    &ah_attr->grh.dgid,
                    UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
             /* TODO add flow_label support */
-
-            printf("[uct_rc_mlx5_iface_common_devx_connect_qp] traffic_class received: %u\n", traffic_class);
-            if (traffic_class != UCP_EP_NO_TCLASS) {
-                UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass, traffic_class);
-                printf("[uct_rc_mlx5_iface_common_devx_connect_qp] traffic_class programmed in QPC: %u\n", traffic_class);
+            if (params && (params->field_mask & UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_TRAFFIC_CLASS)) {
+                printf("[uct_rc_mlx5_iface_common_devx_connect_qp] else params->ep_traffic_class: %u\n", params->ep_traffic_class);
+                UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass,
+                                 params->ep_traffic_class);
             } else {
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass,
-                    iface->super.super.config.traffic_class);
+                                 iface->super.super.config.traffic_class);
             }
         }
     }

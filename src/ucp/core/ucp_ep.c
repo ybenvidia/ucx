@@ -623,13 +623,14 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
         ep->flags |= UCP_EP_FLAG_USER_DATA_PARAM;
     }
 
-    if (params->field_mask & UCP_EP_PARAM_COLLECTIVES_PRIO_TRAFFIC_CLASS) {
-        ep->traffic_class = params->traffic_class;
+    if (params->field_mask & UCP_TEAM_PARAM_FIELD_EP_TRAFFIC_CLASS) {
+        ep->ep_traffic_class = params->ep_traffic_class;
+        ep->flags |= UCP_EP_FLAG_EP_TRAFFIC_CLASS;
     } else {
-        ep->traffic_class = UCP_EP_NO_TCLASS;
+        ep->ep_traffic_class = UCP_EP_NO_TCLASS;
     }
 
-    printf("[ucp_ep_adjust_params] ep->traffic_class set to: %u\n", ep->traffic_class);
+    printf("[ucp_ep_adjust_params] ep->traffic_class set to: %u\n", ep->ep_traffic_class);
     
     return UCS_OK;
 }
@@ -906,10 +907,6 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
     if (status != UCS_OK) {
         goto err_cleanup_lanes;
     }
-
-    printf("[ucp_ep_create] After adjust_params, ep->traffic_class = %u (from params->traffic_class = %u)\n",
-       ep->traffic_class,
-       (params->field_mask & UCP_EP_PARAM_COLLECTIVES_PRIO_TRAFFIC_CLASS) ? params->traffic_class : -1);
 
     status = ucp_ep_client_cm_connect_start(ep, params);
     if (status != UCS_OK) {

@@ -985,7 +985,8 @@ enum uct_ep_params_field {
     /** Enables @ref uct_ep_params::iface_addr_length */
     UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH          = UCS_BIT(18),
 
-    UCT_EP_PARAM_FIELD_COLLECTIVES_PRIO           = UCS_BIT(19)
+    /** Enables @ref uct_ep_params::ep_traffic_class */
+    UCT_EP_PARAM_FIELD_EP_TRAFFIC_CLASS           = UCS_BIT(19)
 };
 
 
@@ -1449,7 +1450,7 @@ struct uct_ep_params {
      */
     size_t                              iface_addr_length;
 
-    uint8_t                             traffic_class;
+    uint8_t                             ep_traffic_class;
 };
 
 
