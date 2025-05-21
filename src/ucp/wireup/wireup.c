@@ -1129,7 +1129,6 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
 
     printf("[ucp_wireup_connect_lane_to_iface] ep->ep_traffic_class: %u\n", ep->ep_traffic_class);
     status = uct_ep_create(&uct_ep_params, &uct_ep);
-    printf("[ucp_wireup_connect_lane_to_iface] uct_ep->ep_traffic_class: %u\n", uct_ep->ep_traffic_class);
     if (status != UCS_OK) {
         /* coverity[leaked_storage] */
         return status;
