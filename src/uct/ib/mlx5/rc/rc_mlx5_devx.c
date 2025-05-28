@@ -413,6 +413,10 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
 
     uct_ib_mlx5_devx_set_qpc_dp_ordering(md, qpc, iface);
 
+    printf("[uct_rc_mlx5_iface_common_devx_connect_qp] is_roce: %d\n", 
+           uct_ib_iface_is_roce(&iface->super.super));
+
+
     if (uct_ib_iface_is_roce(&iface->super.super)) {
         status = uct_ib_iface_create_ah(&iface->super.super, ah_attr,
                                         "RC DEVX QP connect", &ah);
@@ -438,7 +442,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
 
             if (params && (params->field_mask & UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_TRAFFIC_CLASS)) {
                 printf("[uct_rc_mlx5_iface_common_devx_connect_qp] params->ep_traffic_class: %u\n", params->ep_traffic_class);
-                UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass,
+                UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
                                  params->ep_traffic_class);
             } else {
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
@@ -464,14 +468,14 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
             memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
                    &ah_attr->grh.dgid,
                    UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
-            /* TODO add flow_label support */
+            /* TODO add flow_label support */    
             if (params && (params->field_mask & UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_TRAFFIC_CLASS)) {
                 printf("[uct_rc_mlx5_iface_common_devx_connect_qp] else params->ep_traffic_class: %u\n", params->ep_traffic_class);
                 UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass,
                                  params->ep_traffic_class);
             } else {
-                UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass,
-                                 iface->super.super.config.traffic_class);
+            UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass,
+                             iface->super.super.config.traffic_class);
             }
         }
     }

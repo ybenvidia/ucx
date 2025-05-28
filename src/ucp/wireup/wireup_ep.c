@@ -711,7 +711,7 @@ ucp_wireup_ep_connect_to_ep_v2(uct_ep_h tl_ep,
 {
     const uct_ep_connect_to_ep_params_t param = {
         .field_mask = UCT_EP_CONNECT_TO_EP_PARAM_FIELD_DEVICE_ADDR_LENGTH |
-                      UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH,
+                      UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH |
                       ((flags & UCP_EP_FLAG_EP_TRAFFIC_CLASS) ? 
                        UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_TRAFFIC_CLASS : 0),
         .device_addr_length = address_entry->dev_addr_len,
