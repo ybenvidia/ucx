@@ -440,14 +440,17 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
                               ah_attr->dlid);
 
-            if (params && (params->field_mask & UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_TRAFFIC_CLASS)) {
-                printf("[uct_rc_mlx5_iface_common_devx_connect_qp] params->ep_traffic_class: %u\n", params->ep_traffic_class);
-                UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
-                                 params->ep_traffic_class);
-            } else {
-                UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
-                                 uct_ib_iface_roce_dscp(&iface->super.super));
-            }
+            printf("[uct_rc_mlx5_iface_common_devx_connect_qp] params->ep_traffic_class: %u\n", params->ep_traffic_class);
+            UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
+                                  params->ep_traffic_class);
+            // if (params && (params->field_mask & UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_TRAFFIC_CLASS)) {
+            //     printf("[uct_rc_mlx5_iface_common_devx_connect_qp] params->ep_traffic_class: %u\n", params->ep_traffic_class);
+            //     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
+            //                      params->ep_traffic_class);
+            // } else {
+            //     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
+            //                      uct_ib_iface_roce_dscp(&iface->super.super));
+            // }
         }
 
         uct_ib_mlx5_devx_set_qpc_port_affinity(md, path_index, qpc,
