@@ -13,6 +13,7 @@
 #include "ib_md.h"
 #include "ib_device.h"
 #include "ib_log.h"
+#include "ib_log.inl"
 
 #include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
@@ -118,6 +119,11 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "Use GPU Direct RDMA for HCA to access GPU pages directly\n",
      ucs_offsetof(uct_ib_md_config_t, enable_gpudirect_rdma), UCS_CONFIG_TYPE_TERNARY},
 
+    {"GDA_MAX_SYS_LATENCY", "300ns",
+     "Skip GPU device if the distance latency to the IB device is greater than this value.",
+     ucs_offsetof(uct_ib_md_config_t, ext.gda_max_sys_latency),
+     UCS_CONFIG_TYPE_TIME},
+
     {"PCI_BW", "",
      "Maximum effective data transfer rate of PCI bus connected to HCA\n",
      ucs_offsetof(uct_ib_md_config_t, pci_bw), UCS_CONFIG_TYPE_ARRAY(pci_bw)},
@@ -175,6 +181,9 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "enabled.\n",
      ucs_offsetof(uct_ib_md_config_t, ext.odp.mem_types),
      UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+
+    {"DIRECT_NIC", "y", "Use Direct NIC functionality for GPU memory access",
+     ucs_offsetof(uct_ib_md_config_t, ext.direct_nic), UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
@@ -516,12 +525,8 @@ ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
         return UCS_ERR_IO_ERROR;
     }
 
-    ucs_trace("%s(pd=%p addr=%p len=%zu fd=%d offset=%zu access=0x%" PRIx64 "):"
-              " mr=%p lkey=0x%x retry=%lu took %.3f ms",
-              title, md->pd, address, length, dmabuf_fd, dmabuf_offset,
-              access_flags, mr, mr->lkey, retry,
-              ucs_time_to_msec(ucs_get_time() - start_time));
-    UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_REG, +1);
+    uct_ib_reg_mr_trace(title, md, address, length, dmabuf_fd, dmabuf_offset,
+                        access_flags, mr, retry, start_time);
 
     *mr_p = mr;
     return UCS_OK;
@@ -1208,8 +1213,8 @@ void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
               uct_ib_device_name(&md->dev), md->relaxed_order ? "en" : "dis");
 }
 
-static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, const char *file,
-                                          ucs_memory_type_t mem_type)
+void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, const char *file,
+                                   ucs_memory_type_t mem_type)
 {
     if (md->reg_mem_types & UCS_BIT(mem_type)) {
         return;
@@ -1321,8 +1326,8 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         md->check_subnet_filter = 1;
     }
 
-    md->reg_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                        md->reg_nonblock_mem_types;
+    md->reg_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                         md->reg_nonblock_mem_types;
 
     /* Check for GPU-direct support */
     if (md_config->enable_gpudirect_rdma != UCS_NO) {
@@ -1337,7 +1342,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         uct_ib_check_gpudirect_driver(
                 md, "/sys/module/nv_peer_mem/version",
                 UCS_MEMORY_TYPE_CUDA);
-
 
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);

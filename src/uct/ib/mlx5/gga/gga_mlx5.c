@@ -748,13 +748,16 @@ uct_gga_mlx5_ep_is_connected(uct_ep_h tl_ep,
 static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf   = uct_rc_iface_estimate_perf,
-            .iface_vfs_refresh     = uct_rc_iface_vfs_refresh,
-            .ep_query              = (uct_ep_query_func_t)ucs_empty_function,
-            .ep_invalidate         = uct_rc_mlx5_base_ep_invalidate,
-            .ep_connect_to_ep_v2   = uct_gga_mlx5_ep_connect_to_ep_v2,
-            .iface_is_reachable_v2 = uct_gga_mlx5_iface_is_reachable_v2,
-            .ep_is_connected       = uct_gga_mlx5_ep_is_connected
+            .iface_query_v2         = uct_iface_base_query_v2,
+            .iface_estimate_perf    = uct_rc_iface_estimate_perf,
+            .iface_vfs_refresh      = uct_rc_iface_vfs_refresh,
+            .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
+            .ep_query               = (uct_ep_query_func_t)ucs_empty_function,
+            .ep_invalidate          = uct_rc_mlx5_base_ep_invalidate,
+            .ep_connect_to_ep_v2    = uct_gga_mlx5_ep_connect_to_ep_v2,
+            .iface_is_reachable_v2  = uct_gga_mlx5_iface_is_reachable_v2,
+            .ep_is_connected        = uct_gga_mlx5_ep_is_connected,
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
@@ -787,17 +790,19 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
     uct_ib_mlx5_md_t *md                = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
     uct_ib_iface_init_attr_t init_attr  = {};
     ucs_status_t status;
+    uct_ib_mlx5_dp_ordering_t dp_ordering;
 
     init_attr.qp_type               = IBV_QPT_RC;
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
     init_attr.max_rd_atomic         = IBV_DEV_ATTR(&md->super.dev,
                                                    max_qp_rd_atom);
     init_attr.tx_moderation         = config->super.tx_cq_moderation;
+    init_attr.dev_name              = params->mode.device.dev_name;
+    dp_ordering                     = ucs_min(md->dp_ordering_cap_devx.rc,
+                                              UCT_IB_MLX5_DP_ORDERING_OOO_RW);
 
-    status = uct_rc_mlx5_dp_ordering_ooo_init(
-            md, &self->super,
-            ucs_min(md->dp_ordering_cap.rc, UCT_IB_MLX5_DP_ORDERING_OOO_RW),
-            &config->rc_mlx5_common, "gga");
+    status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super, dp_ordering, 0,
+                                              &config->rc_mlx5_common, "gga");
     if (status != UCS_OK) {
         return status;
     }
@@ -847,9 +852,11 @@ uct_gga_mlx5_query_tl_devices(uct_md_h md,
         return UCS_ERR_NO_DEVICE;
     }
 
-    ucs_assertv(mlx5_md->super.cap_flags & UCT_MD_FLAG_EXPORTED_MKEY,
-                "md %p: cap_flags=0x%" PRIx64 " do not have EXPORTED_MKEY flag",
-                mlx5_md, mlx5_md->super.cap_flags);
+    if (!(mlx5_md->super.cap_flags & UCT_MD_FLAG_EXPORTED_MKEY)) {
+        ucs_debug("md %p: cap_flags=0x%" PRIx64 " does not have EXPORTED_MKEY "
+                  "flag", mlx5_md, mlx5_md->super.cap_flags);
+        return UCS_ERR_NO_DEVICE;
+    }
 
     ucs_assertv(ucs_test_all_flags(mlx5_md->flags, UCT_GGA_MLX5_MD_CAPS),
                 "md %p: flags=0x%x do not have mandatory capabilities 0x%x",
