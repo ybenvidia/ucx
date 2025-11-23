@@ -187,6 +187,22 @@ uint32_t ucs_file_checksum(const char *filename);
 
 
 /**
+ * Get interface index for a given interface name.
+ */
+ucs_status_t ucs_ifname_to_index(const char *ndev_name, unsigned *ndev_index_p);
+
+
+/**
+ * Check if a network interface is an IPoIB (IP over InfiniBand) device.
+ *
+ * @param [in]  if_name  Network interface name to check.
+ *
+ * @return 1 if the interface is IPoIB, 0 otherwise.
+ */
+int ucs_netif_is_ipoib(const char *if_name);
+
+
+/**
  * Get a globally unique identifier of the machine running the current process.
  */
 uint64_t ucs_machine_guid();

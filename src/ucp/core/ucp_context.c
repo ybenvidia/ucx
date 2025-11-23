@@ -72,9 +72,10 @@
 #define UCP_CONTEXT_INFINITE_LAT_FACTOR 100
 
 typedef enum ucp_transports_list_search_result {
-    UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY      = UCS_BIT(0),
-    UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN  = UCS_BIT(1),
-    UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_ALIAS = UCS_BIT(2)
+    UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY             = UCS_BIT(0),
+    UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN         = UCS_BIT(1),
+    UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_ALIAS        = UCS_BIT(2),
+    UCP_TRANSPORTS_LIST_SEARCH_RESULT_TL_AND_AUX_IN_ALIAS = UCS_BIT(3)
 } ucp_transports_list_search_result_t;
 
 
@@ -237,6 +238,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Minimum chunk size to split the message sent with rendezvous protocol on\n"
    "multiple rails. Must be greater than 0.",
    ucs_offsetof(ucp_context_config_t, min_rndv_chunk_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"MIN_RMA_CHUNK_SIZE", "8k",
+   "Minimum chunk size to split the message sent with RMA protocol on\n"
+   "multiple rails. Must be greater than 0.",
+   ucs_offsetof(ucp_context_config_t, min_rma_chunk_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RMA_ZCOPY_MAX_SEG_SIZE", "auto",
    "Max size of a segment for rma/rndv zcopy.",
@@ -505,6 +511,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, reg_nb_mem_types),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
+  {"REG_NONBLOCK_FALLBACK", "y",
+   "Allow fallback to blocking memory registration if no MDs supporting non-blocking\n"
+   "registration.",
+   ucs_offsetof(ucp_context_config_t, reg_nb_fallback), UCS_CONFIG_TYPE_BOOL},
+
   {"PREFER_OFFLOAD", "y",
    "Prefer transports capable of remote memory access for RMA and AMO operations.\n"
    "The value is interpreted as follows:\n"
@@ -565,6 +576,22 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, wireup_via_am_lane),
    UCS_CONFIG_TYPE_BOOL},
 
+  {"CONNECT_ALL_TO_ALL", "n",
+   "Establish connections between all pairs of local and remote devices that\n"
+   "are reachable through the transport layer.",
+   ucs_offsetof(ucp_context_config_t, connect_all_to_all),
+   UCS_CONFIG_TYPE_BOOL},
+
+  {"SINGLE_NET_DEVICE", "n", "Use only one network device for all protocols.",
+   ucs_offsetof(ucp_context_config_t, proto_use_single_net_device),
+   UCS_CONFIG_TYPE_BOOL},
+
+  {"NODE_LOCAL_ID", "auto",
+   "An optimization hint for the local identificator on a single node. Does \n"
+   "not affect semantics, only transport selection criteria and the \n"
+   "resulting performance.",
+   ucs_offsetof(ucp_context_config_t, node_local_id), UCS_CONFIG_TYPE_ULUNITS},
+
   {NULL}
 };
 
@@ -595,13 +622,14 @@ static ucs_config_field_t ucp_config_table[] = {
    " - sm/shm  : all shared memory transports (mm, cma, knem).\n"
    " - mm      : shared memory transports - only memory mappers.\n"
    " - ugni    : ugni_smsg and ugni_rdma (uses ugni_udt for bootstrap).\n"
-   " - ib      : all infiniband transports (rc/rc_mlx5, ud/ud_mlx5, dc_mlx5).\n"
+   " - ib      : all infiniband transports (rc/rc_mlx5, ud/ud_mlx5, dc_mlx5, srd).\n"
    " - rc_v    : rc verbs (uses ud for bootstrap).\n"
    " - rc_x    : rc with accelerated verbs (uses ud_mlx5 for bootstrap).\n"
    " - rc      : rc_v and rc_x (preferably if available).\n"
    " - ud_v    : ud verbs.\n"
    " - ud_x    : ud with accelerated verbs.\n"
    " - ud      : ud_v and ud_x (preferably if available).\n"
+   " - srd     : EFA srd reliable transport.\n"
    " - dc/dc_x : dc with accelerated verbs.\n"
    " - tcp     : sockets over TCP/IP.\n"
    " - cuda    : CUDA (NVIDIA GPU) memory support.\n"
@@ -683,7 +711,8 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "sm",    { "posix", "sysv", "xpmem", "knem", "cma", NULL } },
   { "shm",   { "posix", "sysv", "xpmem", "knem", "cma", NULL } },
   { "ib",    { "rc_verbs", "ud_verbs", "rc_mlx5", "ud_mlx5", "dc_mlx5",
-               "gga_mlx5", NULL } },
+               "gga_mlx5", UCP_TL_AUX("ud_mlx5"), UCP_TL_AUX("ud_verbs"),
+               "srd", NULL } },
   { "ud_v",  { "ud_verbs", NULL } },
   { "ud_x",  { "ud_mlx5", NULL } },
   { "ud",    { "ud_mlx5", "ud_verbs", NULL } },
@@ -710,6 +739,7 @@ const char *ucp_feature_str[] = {
     [ucs_ilog2(UCP_FEATURE_WAKEUP)] = "UCP_FEATURE_WAKEUP",
     [ucs_ilog2(UCP_FEATURE_STREAM)] = "UCP_FEATURE_STREAM",
     [ucs_ilog2(UCP_FEATURE_AM)]     = "UCP_FEATURE_AM",
+    [ucs_ilog2(UCP_FEATURE_DEVICE)] = "UCP_FEATURE_DEVICE",
     NULL
 };
 
@@ -1016,6 +1046,7 @@ ucp_transports_list_search(const char *tl_name,
     uint8_t search_result = 0;
     uint64_t tmp_tl_cfg_mask;
     ucp_tl_alias_t *alias;
+    int tl_in_alias, tl_aux_in_alias;
 
     if (ucp_config_is_tl_name_present(tl_array, tl_name, 0, NULL,
                                       tl_cfg_mask)) {
@@ -1033,16 +1064,25 @@ ucp_transports_list_search(const char *tl_name,
         tmp_tl_cfg_mask = 0;
         if (ucp_config_is_tl_name_present(tl_array, alias->alias, 1, NULL,
                                           &tmp_tl_cfg_mask)) {
-            if (ucp_tls_alias_is_present(alias, tl_name, NULL)) {
+            tl_in_alias = ucp_tls_alias_is_present(alias, tl_name, NULL);
+            if (tl_in_alias) {
                 /* alias={tl_name}, UCX_TLS=[^]alias */
                 *tl_cfg_mask  |= tmp_tl_cfg_mask;
                 search_result |= UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY;
             }
 
-            if (ucp_tls_alias_is_present(alias, tl_name, UCP_TL_AUX_SUFFIX)) {
+            tl_aux_in_alias = ucp_tls_alias_is_present(alias, tl_name,
+                                                       UCP_TL_AUX_SUFFIX);
+            if (tl_aux_in_alias) {
                 /* alias={tl_name:aux}, UCX_TLS=[^]alias */
                 *tl_cfg_mask  |= tmp_tl_cfg_mask;
                 search_result |= UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_ALIAS;
+            }
+
+            if (tl_in_alias && tl_aux_in_alias) {
+                /* alias={tl_name, tl_name:aux}, UCX_TLS=[^]alias */
+                search_result |= 
+                          UCP_TRANSPORTS_LIST_SEARCH_RESULT_TL_AND_AUX_IN_ALIAS;
             }
         }
 
@@ -1102,13 +1142,15 @@ ucp_is_resource_in_transports_list(const char *tl_name,
         return !(search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY);
     }
 
-    /* Only explicit indication in the deny list can completely disable
-     * transport which can be used as an auxiliary.
-     * E.g: UCX_TLS=^tl_name,tl_name:aux, or alias={tl_name} and
-     * UCX_TLS=^alias,alias:aux. */
+    /* A transport that can be used as an auxiliary is disabled by
+     * including it in the deny list in one of the following ways:
+     *  - UCX_TLS=^tl_name,tl_name:aux
+     *  - UCX_TLS=^alias,alias:aux where alias={tl_name}
+     *  - UCX_TLS=^alias where alias={tl_name,tl_name:aux} */
     if (ucs_test_all_flags(search_result,
                            UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY |
-                           UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN)) {
+                           UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN) ||
+        search_result & UCP_TRANSPORTS_LIST_SEARCH_RESULT_TL_AND_AUX_IN_ALIAS) {
         return 0;
     }
 
@@ -1164,6 +1206,7 @@ static void ucp_add_tl_resource_if_enabled(
         const uct_tl_resource_desc_t *resource, unsigned *num_resources_p,
         uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
 {
+    ucp_tl_md_t *md = &context->tl_mds[md_index];
     uint8_t rsc_flags;
     ucp_rsc_index_t dev_index, i;
 
@@ -1193,6 +1236,10 @@ static void ucp_add_tl_resource_if_enabled(
             }
         }
         context->tl_rscs[context->num_tls].dev_index = dev_index;
+
+        if (resource->sys_device < UCP_MAX_SYS_DEVICES) {
+            md->sys_dev_map |= UCS_BIT(resource->sys_device);
+        }
 
         ++context->num_tls;
         ++(*num_resources_p);
@@ -1403,8 +1450,9 @@ static ucs_status_t ucp_fill_tl_md(ucp_context_h context,
     ucs_status_t status;
 
     /* Initialize tl_md structure */
-    tl_md->cmpt_index = cmpt_index;
-    tl_md->rsc        = *md_rsc;
+    tl_md->cmpt_index  = cmpt_index;
+    tl_md->rsc         = *md_rsc;
+    tl_md->sys_dev_map = 0;
 
     /* Read MD configuration */
     status = uct_md_config_read(context->tl_cmpts[cmpt_index].cmpt, NULL, NULL,
@@ -1589,11 +1637,10 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
     unsigned num_tl_resources;
     ucs_status_t status;
     ucp_rsc_index_t i;
+    const uct_md_attr_v2_t *md_attr;
     unsigned md_index;
     uint64_t mem_type_mask;
     uint64_t mem_type_bitmap;
-    ucs_memory_type_t mem_type;
-    const uct_md_attr_v2_t *md_attr;
 
     /* List memory domain resources */
     uct_component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES |
@@ -1655,51 +1702,6 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
             mem_type_mask |= mem_type_bitmap;
         }
 
-        ucs_memory_type_for_each(mem_type) {
-            if (md_attr->flags & UCT_MD_FLAG_REG) {
-                if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
-                    !(md_attr->reg_nonblock_mem_types & UCS_BIT(mem_type))) {
-                    if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
-                        /* Keep map of MDs supporting blocking registration
-                         * if non-blocking registration is requested for the
-                         * given memory type. In some cases blocking
-                         * registration maybe required anyway (e.g. internal
-                         * staging buffers for rndv pipeline protocols). */
-                        context->reg_block_md_map[mem_type] |= UCS_BIT(md_index);
-                    }
-                    continue;
-                }
-
-                if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
-                    context->reg_md_map[mem_type] |= UCS_BIT(md_index);
-                }
-
-                if (md_attr->cache_mem_types & UCS_BIT(mem_type)) {
-                    context->cache_md_map[mem_type] |= UCS_BIT(md_index);
-                }
-
-                if ((context->config.ext.gva_enable != UCS_CONFIG_OFF) &&
-                    (md_attr->gva_mem_types & UCS_BIT(mem_type))) {
-                    context->gva_md_map[mem_type] |= UCS_BIT(md_index);
-                }
-            }
-        }
-
-        if (md_attr->flags & UCT_MD_FLAG_EXPORTED_MKEY) {
-            context->export_md_map |= UCS_BIT(md_index);
-        }
-
-        if (md_attr->flags & UCT_MD_FLAG_REG_DMABUF) {
-            context->dmabuf_reg_md_map |= UCS_BIT(md_index);
-        }
-
-        ucs_for_each_bit(mem_type, md_attr->dmabuf_mem_types) {
-            /* In case of multiple providers, take the first one */
-            if (context->dmabuf_mds[mem_type] == UCP_NULL_RESOURCE) {
-                context->dmabuf_mds[mem_type] = md_index;
-            }
-        }
-
         ++context->num_mds;
     }
 
@@ -1736,15 +1738,109 @@ static ucs_status_t ucp_fill_aux_tls(ucs_string_set_t *aux_tls)
     return UCS_OK;
 }
 
+static void
+ucp_update_memtype_md_map(uint64_t mem_types_map, ucs_memory_type_t mem_type,
+                          ucp_md_index_t md_index, ucp_md_map_t *md_map_p)
+{
+    if (mem_types_map & UCS_BIT(mem_type)) {
+        *md_map_p |= UCS_BIT(md_index);
+    }
+}
+
+/* Returns the MDs that are part of the fallback mechanism */
+static ucp_md_map_t ucp_fill_fallback_reg_nonblock_mds(ucp_context_h context)
+{
+    ucp_md_map_t md_map = 0;
+    ucp_rsc_index_t tl_idx;
+
+    for (tl_idx = 0; tl_idx < context->num_tls; tl_idx++) {
+        if (context->tl_rscs[tl_idx].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
+            /* Find all memory domains with at least one network device. */
+            md_map |= UCS_BIT(context->tl_rscs[tl_idx].md_index);
+        }
+    }
+
+    return (md_map == 0) ? ~md_map : md_map;
+}
+
 static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
+    ucp_md_map_t reg_block_md_map;
+    ucp_md_map_t reg_nonblock_md_map;
+    ucp_md_map_t fallback_reg_nonblock_md_map;
     ucs_memory_type_t mem_type;
     ucp_md_index_t md_index;
+    const uct_md_attr_v2_t *md_attr;
 
-    /* If we have a dmabuf provider for a memory type, it means we can register
-     * memory of this type with any md that supports dmabuf registration. */
+    for (md_index = 0; md_index < context->num_mds; ++md_index) {
+        md_attr = &context->tl_mds[md_index].attr;
+        if (md_attr->flags & UCT_MD_FLAG_EXPORTED_MKEY) {
+            context->export_md_map |= UCS_BIT(md_index);
+        }
+
+        if (md_attr->flags & UCT_MD_FLAG_REG_DMABUF) {
+            context->dmabuf_reg_md_map |= UCS_BIT(md_index);
+        }
+    }
+
+    fallback_reg_nonblock_md_map = ucp_fill_fallback_reg_nonblock_mds(context);
+
     ucs_memory_type_for_each(mem_type) {
+        reg_block_md_map    = 0;
+        reg_nonblock_md_map = 0;
+        for (md_index = 0; md_index < context->num_mds; ++md_index) {
+            md_attr = &context->tl_mds[md_index].attr;
+            if (md_attr->dmabuf_mem_types & UCS_BIT(mem_type)) {
+                /* In case of multiple providers, take the first one */
+                if (context->dmabuf_mds[mem_type] == UCP_NULL_RESOURCE) {
+                    context->dmabuf_mds[mem_type] = md_index;
+                }
+            }
+
+            if (!(md_attr->flags & UCT_MD_FLAG_REG)) {
+                continue;
+            }
+
+            ucp_update_memtype_md_map(
+                    md_attr->reg_nonblock_mem_types, mem_type,
+                    md_index, &reg_nonblock_md_map);
+            ucp_update_memtype_md_map(
+                    md_attr->reg_mem_types, mem_type, md_index,
+                    &reg_block_md_map);
+            ucp_update_memtype_md_map(
+                    md_attr->cache_mem_types, mem_type, md_index,
+                    &context->cache_md_map[mem_type]);
+
+            if (context->config.ext.gva_enable != UCS_CONFIG_OFF) {
+                ucp_update_memtype_md_map(
+                        md_attr->gva_mem_types, mem_type, md_index,
+                        &context->gva_md_map[mem_type]);
+            }
+        }
+
+        /* Keep map of MDs supporting blocking registration if non-blocking
+         * registration is requested for the given memory type. In some cases
+         * blocking registration maybe required anyway (e.g. internal staging
+         * buffers for rndv pipeline protocols). */
+        context->reg_block_md_map[mem_type] = reg_block_md_map;
+
+        if (context->config.ext.reg_nb_fallback &&
+            ((reg_nonblock_md_map & fallback_reg_nonblock_md_map) == 0)) {
+            /* Fallback to blocking registration if no MD supports non-blocking
+             * registration */
+            reg_nonblock_md_map = reg_block_md_map;
+        }
+
+        if (context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) {
+            context->reg_md_map[mem_type] = reg_nonblock_md_map;
+        } else {
+            context->reg_md_map[mem_type] = reg_block_md_map;
+        }
+
+        /* If we have a dmabuf provider for a memory type, it means we can
+         * register memory of this type with any md that supports dmabuf
+         * registration. */
         if (context->dmabuf_mds[mem_type] != UCP_NULL_RESOURCE) {
             context->reg_md_map[mem_type] |= context->dmabuf_reg_md_map;
         }
@@ -1966,6 +2062,9 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
                                                         estimated_num_ppn,
                                                         ESTIMATED_NUM_PPN, 1);
 
+    context->config.node_local_id = UCP_PARAM_FIELD_VALUE(params, node_local_id,
+                                                          NODE_LOCAL_ID, 0);
+
     if ((params->field_mask & UCP_PARAM_FIELD_MT_WORKERS_SHARED) &&
         params->mt_workers_shared) {
         context->mt_lock.mt_type = mt_type;
@@ -2075,6 +2174,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     ucs_debug("estimated number of endpoints per node is %d",
               context->config.est_num_ppn);
 
+    if (context->config.ext.node_local_id != UCS_ULUNITS_AUTO) {
+        /* node_local_id was set via the env variable. Override current value */
+        context->config.node_local_id = context->config.ext.node_local_id;
+    }
+    ucs_debug("node local id is %lu", context->config.node_local_id);
+
     if (UCS_CONFIG_DBL_IS_AUTO(context->config.ext.bcopy_bw)) {
         /* bcopy_bw wasn't set via the env variable. Calculate the value */
         if (context->config.ext.proto_enable) {
@@ -2102,6 +2207,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     if (context->config.ext.min_rndv_chunk_size == 0) {
         ucs_error("minimum chunk size for rendezvous protocol must be greater"
+                  " than 0");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (context->config.ext.min_rma_chunk_size == 0) {
+        ucs_error("minimum chunk size for RMA protocol must be greater"
                   " than 0");
         return UCS_ERR_INVALID_PARAM;
     }
@@ -2503,6 +2614,10 @@ ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
         ucs_strncpy_safe(attr->name, context->name, UCP_ENTITY_NAME_MAX);
     }
 
+    if (attr->field_mask & UCP_ATTR_FIELD_DEVICE_COUNTER_SIZE) {
+        attr->device_counter_size = sizeof(uint64_t);
+    }
+
     return UCS_OK;
 }
 
@@ -2687,9 +2802,11 @@ double ucp_tl_iface_latency_with_priority(ucp_context_h context,
 UCS_F_CTOR void ucp_global_init(void)
 {
     UCS_CONFIG_ADD_TABLE(ucp_config_table, &ucs_config_global_list);
+    ucp_device_init();
 }
 
 UCS_F_DTOR static void ucp_global_cleanup(void)
 {
+    ucp_device_cleanup();
     UCS_CONFIG_REMOVE_TABLE(ucp_config_table);
 }

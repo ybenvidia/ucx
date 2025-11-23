@@ -7,18 +7,21 @@
 #  include "config.h"
 #endif
 
-#include "cuda_ipc_md.h"
+#include "cuda_ipc.inl"
 #include "cuda_ipc_cache.h"
+#include "cuda_ipc_md.h"
 
-#include <string.h>
-#include <limits.h>
 #include <ucs/debug/log.h>
-#include <ucs/sys/sys.h>
 #include <ucs/debug/memtrack_int.h>
-#include <ucs/type/class.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sys.h>
+#include <ucs/type/class.h>
 #include <uct/api/v2/uct_v2.h>
+#include <uct/cuda/base/cuda_nvml.h>
+
+#include <limits.h>
+#include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -106,81 +109,13 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 }
 
 static ucs_status_t
-uct_cuda_ipc_mem_reg_push_ctx(CUdeviceptr address, CUdevice *cuda_device_p,
-                              int *is_ctx_pushed)
-{
-#define UCT_CUDA_IPC_NUM_ATTRS 2
-    CUdevice cuda_device = CU_DEVICE_INVALID;
-    CUpointer_attribute attr_type[UCT_CUDA_IPC_NUM_ATTRS];
-    void *attr_data[UCT_CUDA_IPC_NUM_ATTRS];
-    CUcontext cuda_ctx, cuda_curr_ctx;
-    int cuda_device_ordinal;
-    ucs_status_t status;
-
-    *is_ctx_pushed = 0;
-
-    attr_type[0] = CU_POINTER_ATTRIBUTE_CONTEXT;
-    attr_data[0] = &cuda_ctx;
-    attr_type[1] = CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL;
-    attr_data[1] = &cuda_device_ordinal;
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuPointerGetAttributes(UCT_CUDA_IPC_NUM_ATTRS, attr_type, attr_data,
-                                   address));
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    if (cuda_ctx == NULL) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cuda_device,
-                                                      cuda_device_ordinal));
-        if (status != UCS_OK) {
-            goto out;
-        }
-
-        status = uct_cuda_primary_ctx_retain(cuda_device, 0, &cuda_ctx);
-        if (status != UCS_OK) {
-            goto out;
-        }
-    } else {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_curr_ctx));
-        if ((status != UCS_OK) || (cuda_curr_ctx == cuda_ctx)) {
-            /* Failed to get current context or the pointer's context is
-             * already current, no need to push/pop */
-            goto out;
-        }
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
-    if (status != UCS_OK) {
-        if (cuda_device != CU_DEVICE_INVALID) {
-            UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
-        }
-        goto out;
-    }
-
-    *is_ctx_pushed = 1;
-out:
-    *cuda_device_p = cuda_device;
-    return status;
-}
-
-static void uct_cuda_ipc_mem_reg_pop_ctx(CUdevice cuda_device)
-{
-    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-    if (cuda_device != CU_DEVICE_INVALID) {
-        UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
-    }
-}
-
-static ucs_status_t
 uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
                          uct_cuda_ipc_lkey_t **key_p)
 {
     uct_cuda_ipc_lkey_t *key;
-    CUdevice cuda_device;
     ucs_status_t status;
     int is_ctx_pushed;
+    CUdevice cuda_device;
 #if HAVE_CUDA_FABRIC
 #define UCT_CUDA_IPC_QUERY_NUM_ATTRS 3
     CUmemGenericAllocationHandle handle;
@@ -188,7 +123,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     CUpointer_attribute attr_type[UCT_CUDA_IPC_QUERY_NUM_ATTRS];
     void *attr_data[UCT_CUDA_IPC_QUERY_NUM_ATTRS];
     int legacy_capable;
-    int allowed_handle_types;
+    uint64_t allowed_handle_types;
 #endif
 
     key = ucs_calloc(1, sizeof(*key), "uct_cuda_ipc_lkey_t");
@@ -196,8 +131,8 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = uct_cuda_ipc_mem_reg_push_ctx((CUdeviceptr)addr, &cuda_device,
-                                           &is_ctx_pushed);
+    status = uct_cuda_ipc_check_and_push_ctx((CUdeviceptr)addr, &cuda_device,
+                                             &is_ctx_pushed);
     if (status != UCS_OK) {
         goto out;
     }
@@ -249,15 +184,10 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
             UCT_CUDADRV_FUNC_LOG_ERR(cuMemExportToShareableHandle(
                         &key->ph.handle.fabric_handle, handle,
                         CU_MEM_HANDLE_TYPE_FABRIC, 0));
+        UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
         if (status != UCS_OK) {
-            cuMemRelease(handle);
             ucs_debug("unable to export handle for VMM ptr: %p", addr);
             goto non_ipc;
-        }
-
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemRelease(handle));
-        if (status != UCS_OK) {
-            goto out_pop_ctx;
         }
 
         key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM;
@@ -292,7 +222,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     goto common_path;
 
 non_ipc:
-    key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_ERROR;
+    key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC;
     goto common_path;
 #endif
 legacy_path:
@@ -305,17 +235,17 @@ legacy_path:
 
 common_path:
     ucs_list_add_tail(&memh->list, &key->link);
-    ucs_trace("registered addr:%p/%p length:%zd dev_num:%d buffer_id:%llu",
-              addr, (void *)key->d_bptr, key->b_len, (int)memh->dev_num,
-              key->ph.buffer_id);
+    ucs_trace("registered addr:%p/%p length:%zd type:%u dev_num:%d "
+              "buffer_id:%llu",
+              addr, (void*)key->d_bptr, key->b_len, key->ph.handle_type,
+              cuda_device, key->ph.buffer_id);
 
-    *key_p = key;
-    status = UCS_OK;
+    memh->dev_num = cuda_device;
+    *key_p        = key;
+    status        = UCS_OK;
 
 out_pop_ctx:
-    if (is_ctx_pushed) {
-        uct_cuda_ipc_mem_reg_pop_ctx(cuda_device);
-    }
+    uct_cuda_ipc_check_and_pop_ctx(is_ctx_pushed);
 out:
     if (status != UCS_OK) {
         ucs_free(key);
@@ -363,31 +293,42 @@ found:
 
 static ucs_status_t
 uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
-                                uct_cuda_ipc_rkey_t *rkey)
+                                uct_cuda_ipc_unpacked_rkey_t *rkey,
+                                ucs_sys_device_t sys_dev)
 {
-    CUdevice this_device;
+    CUdevice cu_dev;
     ucs_status_t status;
     void *d_mapped;
     uct_cuda_ipc_dev_cache_t *cache;
     uint8_t *accessible;
 
-    if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&this_device)) != UCS_OK) {
-        return UCS_ERR_UNREACHABLE;
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        /* Use device of the current context */
+        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&cu_dev)) != UCS_OK) {
+            return UCS_ERR_UNREACHABLE;
+        }
+    } else {
+        status = uct_cuda_base_get_cuda_device(sys_dev, &cu_dev);
+        if (status != UCS_OK) {
+            ucs_warn("failed to map sys device [%d] to cuda device: %s",
+                     sys_dev, ucs_status_string(status));
+            return UCS_ERR_UNREACHABLE;
+        }
     }
 
     pthread_mutex_lock(&component->lock);
 
-    cache = uct_cuda_ipc_get_dev_cache(component, rkey);
+    cache = uct_cuda_ipc_get_dev_cache(component, &rkey->super);
     if (ucs_unlikely(NULL == cache)) {
         status = UCS_ERR_NO_RESOURCE;
         goto err;
     }
 
-    /* overwrite dev_num with a unique ID; this means that relative remote
+    /* use unique id for stream id; this means that relative remote
      * device number of multiple peers do not map on the same stream and reduces
      * stream sequentialization */
-    rkey->dev_num = cache->dev_num;
-    accessible    = &cache->accessible[this_device];
+    rkey->stream_id = cache->dev_num;
+    accessible      = &cache->accessible[cu_dev];
     if (ucs_unlikely(*accessible == UCS_TRY)) { /* unchecked, add to cache */
 
         /* Check if peer is reachable by trying to open memory handle. This is
@@ -406,7 +347,8 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
          * Now, we immediately insert into cache to save on calling
          * OpenMemHandle for the same handle because the cache is globally
          * accessible using rkey->pid. */
-        status = uct_cuda_ipc_map_memhandle(rkey, &d_mapped);
+        status = uct_cuda_ipc_map_memhandle(&rkey->super, cu_dev, &d_mapped,
+                                            UCS_LOG_LEVEL_DEBUG);
 
         *accessible = ((status == UCS_OK) || (status == UCS_ERR_ALREADY_EXISTS))
                       ? UCS_YES : UCS_NO;
@@ -428,25 +370,35 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     uct_cuda_ipc_component_t *com = ucs_derived_of(component,
                                                    uct_cuda_ipc_component_t);
     uct_cuda_ipc_rkey_t *packed   = (uct_cuda_ipc_rkey_t *)rkey_buffer;
-    uct_cuda_ipc_rkey_t *key;
+    uct_cuda_ipc_unpacked_rkey_t *unpacked;
+    ucs_sys_device_t sys_dev;
     ucs_status_t status;
 
-    status = uct_cuda_ipc_is_peer_accessible(com, packed);
+    sys_dev = UCS_PARAM_VALUE(UCT_RKEY_UNPACK_FIELD, params, sys_device,
+                              SYS_DEVICE, UCS_SYS_DEVICE_ID_UNKNOWN);
+
+    unpacked = ucs_malloc(sizeof(*unpacked), "uct_cuda_ipc_unpacked_rkey_t");
+    if (NULL == unpacked) {
+        ucs_error("failed to allocate memory for uct_cuda_ipc_unpacked_rkey_t");
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    unpacked->super = *packed;
+
+    status = uct_cuda_ipc_is_peer_accessible(com, unpacked, sys_dev);
     if (status != UCS_OK) {
-        return status;
+        goto err_free_key;
     }
 
-    key = ucs_malloc(sizeof(*key), "uct_cuda_ipc_rkey_t");
-    if (NULL == key) {
-        ucs_error("failed to allocate memory for uct_cuda_ipc_rkey_t");
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    *key      = *packed;
     *handle_p = NULL;
-    *rkey_p   = (uintptr_t) key;
-
+    *rkey_p   = (uintptr_t) unpacked;
     return UCS_OK;
+
+err_free_key:
+    ucs_free(unpacked);
+err:
+    return status;
 }
 
 static ucs_status_t uct_cuda_ipc_rkey_release(uct_component_t *component,
@@ -462,9 +414,6 @@ uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
                      const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
     uct_cuda_ipc_memh_t *memh;
-    CUdevice cu_device;
-
-    UCT_CUDA_IPC_GET_DEVICE(cu_device);
 
     memh = ucs_malloc(sizeof(*memh), "uct_cuda_ipc_memh_t");
     if (NULL == memh) {
@@ -472,7 +421,8 @@ uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
         return UCS_ERR_NO_MEMORY;
     }
 
-    memh->dev_num = (int) cu_device;
+    /* dev_num is initialized during pack in uct_cuda_ipc_mem_add_reg */
+    memh->dev_num = CU_DEVICE_INVALID;
     memh->pid     = getpid();
     ucs_list_head_init(&memh->list);
 
@@ -504,34 +454,29 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
     static int mnnvl_supported = 0;
 #else
     static int mnnvl_supported = -1;
-    nvmlGpuFabricInfo_t fabric_info;
+    nvmlGpuFabricInfoV_t fabric_info;
     nvmlDevice_t device;
     ucs_status_t status;
     char buf[64];
+    int64_t *cluster_uuid;
 
     if (mnnvl_supported != -1) {
         goto out;
     }
 
-    if ((mnnvl_enable == UCS_NO) ||
-        (UCT_NVML_FUNC(nvmlInit_v2(), UCS_LOG_LEVEL_DIAG) != UCS_OK)) {
+    if (mnnvl_enable == UCS_NO) {
         mnnvl_supported = 0;
         goto out;
     }
 
-    status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetHandleByIndex(0, &device));
+    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, 0, &device);
     if (status != UCS_OK) {
         goto out_not_supported;
     }
 
-    /**
-     * nvmlDeviceGetGpuFabricInfo was deprecated in CUDA 12.4.0. The old API is
-     * used to ensure compatibility of the UCX. Thus, UCX built with CUDA 12.4.0
-     * or newer can be used on a system with older CUDA 12 versions.
-     * TODO: Replace the deprecated API along with the major CUDA release.
-     */
-    status = UCT_NVML_FUNC_LOG_ERR(
-            nvmlDeviceGetGpuFabricInfo(device, &fabric_info));
+    fabric_info.version = nvmlGpuFabricInfo_v2;
+    status              = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetGpuFabricInfoV,
+                                                  device, &fabric_info);
     if (status != UCS_OK) {
         goto out_not_supported;
     }
@@ -542,20 +487,23 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
                                NVML_GPU_FABRIC_UUID_LEN, buf, sizeof(buf),
                                SIZE_MAX));
 
+    cluster_uuid = (int64_t*)fabric_info.clusterUuid;
     if ((fabric_info.state == NVML_GPU_FABRIC_STATE_COMPLETED) &&
-        (fabric_info.status == NVML_SUCCESS)) {
+        (fabric_info.status == NVML_SUCCESS) &&
+        (cluster_uuid[0] | cluster_uuid[1]) != 0) {
         mnnvl_supported = 1;
-        goto out_sd;
+        goto out;
     }
 
 out_not_supported:
     mnnvl_supported = 0;
-out_sd:
-    UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
 out:
 #endif
     if ((mnnvl_enable == UCS_YES) && !mnnvl_supported) {
         ucs_error("multi-node NVLINK support is requested but not supported");
+    } else {
+        ucs_debug("multi-node NVLINK support is %s", mnnvl_supported ?
+                  "enabled" : "disabled");
     }
 
     return mnnvl_supported;

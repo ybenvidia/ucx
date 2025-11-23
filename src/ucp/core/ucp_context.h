@@ -127,6 +127,9 @@ typedef struct ucp_context_config {
     /** Minimum allowed chunk size when splitting rndv message over multiple
      *  lanes */
     size_t                                 min_rndv_chunk_size;
+    /** Minimum allowed chunk size when splitting rma message over multiple
+     *  lanes */
+    size_t                                 min_rma_chunk_size;
     /** Estimated number of endpoints */
     size_t                                 estimated_num_eps;
     /** Estimated number of processes per node */
@@ -183,6 +186,8 @@ typedef struct ucp_context_config {
     char                                   *proto_info_dir;
     /** Memory types that perform non-blocking registration by default */
     uint64_t                               reg_nb_mem_types;
+    /** Enable fallback to blocking registration if no MDs support nonblocking */
+    int                                    reg_nb_fallback;
     /** Prefer native RMA transports for RMA/AMO protocols */
     int                                    prefer_offload;
     /** RMA zcopy segment size */
@@ -205,10 +210,17 @@ typedef struct ucp_context_config {
     double                                 rcache_overhead;
     /** UCP extra operation attributes flags */
     uint64_t                               extra_op_attr_flags;
-    /* Upper limit to the amount of prioritized endpoints */
+    /** Upper limit to the amount of prioritized endpoints */
     unsigned                               max_priority_eps;
     /* Use AM lane to send wireup messages */
     int                                    wireup_via_am_lane;
+    /** Extend endpoint lanes connections of each local device to all remote
+     *  devices */
+    int                                    connect_all_to_all;
+    /** Use only one network device for all protocols */
+    int                                    proto_use_single_net_device;
+    /** Local identificator on a single node */
+    unsigned long                          node_local_id;
 } ucp_context_config_t;
 
 
@@ -274,7 +286,7 @@ typedef struct ucp_tl_resource_desc {
  */
 typedef struct ucp_tl_alias {
     const char                    *alias;   /* Alias name */
-    const char*                   tls[8];   /* Transports which are selected by the alias */
+    const char*                   tls[10];   /* Transports which are selected by the alias */
 } ucp_tl_alias_t;
 
 
@@ -320,6 +332,11 @@ typedef struct ucp_tl_md {
      * Global VA memory handle
      */
     uct_mem_h              gva_mr;
+
+    /**
+     * Set of known system devices associated to the MD
+     */
+    ucp_sys_dev_map_t      sys_dev_map;
 } ucp_tl_md_t;
 
 
@@ -403,6 +420,9 @@ typedef struct ucp_context {
 
         /* How many endpoints are expected to be created on single node */
         int                       est_num_ppn;
+
+        /* Local identificator on a single node */
+        unsigned long             node_local_id;
 
         struct {
             size_t                         size;    /* Request size for user */
@@ -729,6 +749,13 @@ ucp_context_usage_tracker_enabled(ucp_context_h context)
     return context->config.ext.dynamic_tl_switch_interval != UCS_TIME_INFINITY;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_context_rndv_is_enabled(ucp_context_h context)
+{
+    return (context->config.ext.rndv_intra_thresh != UCS_MEMUNITS_INF) ||
+           (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF);
+}
+
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
                                      ucs_memory_type_t mem_type,
                                      uint64_t md_reg_flags,
@@ -757,5 +784,11 @@ ucp_config_modify_internal(ucp_config_t *config, const char *name,
 
 
 void ucp_apply_uct_config_list(ucp_context_h context, void *config);
+
+
+void ucp_device_init(void);
+
+
+void ucp_device_cleanup(void);
 
 #endif

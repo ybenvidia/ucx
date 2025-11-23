@@ -53,6 +53,7 @@ struct resource {
     std::string             dev_name;
     std::string             variant_name;
     uct_device_type_t       dev_type;
+    ucs_sys_device_t        sys_device;
     ucs::sock_addr_storage  listen_sock_addr;     /* sockaddr to listen on */
     ucs::sock_addr_storage  connect_sock_addr;    /* sockaddr to connect to */
     ucs::sock_addr_storage  source_sock_addr;     /* sockaddr to connect from */
@@ -62,7 +63,7 @@ struct resource {
     resource(uct_component_h component, const std::string& component_name,
              const std::string& md_name, const ucs_cpu_set_t& local_cpus,
              const std::string& tl_name, const std::string& dev_name,
-             uct_device_type_t dev_type);
+             uct_device_type_t dev_type, ucs_sys_device_t sys_dev);
     resource(uct_component_h component, const uct_component_attr& cmpnt_attr,
              const uct_md_attr_t& md_attr,
              const uct_md_resource_desc_t& md_resource,
@@ -383,6 +384,7 @@ protected:
     bool get_config(const std::string& name, std::string& value) const;
 
     virtual bool has_ud() const;
+    virtual bool has_srd() const;
     virtual bool has_rc() const;
     virtual bool has_rc_or_dc() const;
     virtual bool has_ib() const;
@@ -473,7 +475,8 @@ protected:
     rc_verbs,           \
     dc_mlx5,            \
     ud_verbs,           \
-    ud_mlx5
+    ud_mlx5,            \
+    srd
 
 
 #define UCT_TEST_IB_AND_GGA_TLS \

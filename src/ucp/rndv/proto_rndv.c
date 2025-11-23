@@ -23,7 +23,8 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
 {
     ucp_context_h context                    = params->super.super.worker->context;
     const ucp_ep_config_key_t *ep_config_key = params->super.super.ep_config_key;
-    ucp_rsc_index_t mem_sys_dev, ep_sys_dev;
+    ucp_rsc_index_t mem_sys_dev              = params->super.reg_mem_info.sys_dev;
+    ucp_rsc_index_t ep_sys_dev;
     const uct_iface_attr_t *iface_attr;
     const uct_md_attr_v2_t *md_attr;
     const uct_component_attr_t *cmpt_attr;
@@ -31,8 +32,8 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
     ucp_lane_index_t lane;
     ucs_status_t status;
 
-    /* md_map is all lanes which support get_zcopy on the given mem_type and
-     * require remote key
+    /* md_map is all lanes which support get_zcopy on the given mem_type,
+     * require remote key and can reach memory sys_dev
      */
     *md_map      = 0;
     *sys_dev_map = 0;
@@ -76,6 +77,11 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
             continue;
         }
 
+        /* Check reachability between mem_sys_dev and current lane's sys_dev */
+        if (!ucs_topo_is_reachable(ep_sys_dev, mem_sys_dev)) {
+            continue;
+        }
+
         ucs_trace_req("lane[%d]: selected md %s index %u", lane,
                       context->tl_mds[md_index].rsc.md_name, md_index);
         *md_map |= UCS_BIT(md_index);
@@ -87,7 +93,6 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
         *sys_dev_map |= UCS_BIT(ep_sys_dev);
     }
 
-    mem_sys_dev = params->super.reg_mem_info.sys_dev;
     ucs_for_each_bit(ep_sys_dev, *sys_dev_map) {
         status = ucs_topo_get_distance(mem_sys_dev, ep_sys_dev, sys_distance);
         ucs_assertv_always(status == UCS_OK, "mem_info->sys_dev=%d sys_dev=%d",
@@ -153,6 +158,7 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
     rkey_config_key.ep_cfg_index = ep_cfg_index;
     rkey_config_key.sys_dev      = params->super.reg_mem_info.sys_dev;
     rkey_config_key.mem_type     = params->super.reg_mem_info.type;
+    rkey_config_key.flags        = 0;
 
     rkey_config_key.unreachable_md_map = 0;
 
@@ -308,7 +314,7 @@ ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params,
     rpriv->lane             = lane;
     rpriv->packed_rkey_size = ucp_rkey_packed_size(
             init_params->worker->context, rpriv->md_map,
-            params->super.reg_mem_info.sys_dev, rpriv->sys_dev_map);
+            params->super.reg_mem_info.sys_dev, rpriv->sys_dev_map, 0);
 }
 
 void ucp_proto_rndv_set_variant_config(
@@ -504,10 +510,8 @@ ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params)
 
     num_lanes = ucp_proto_common_find_lanes(params,
                                             UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY,
-                                            UCP_PROTO_COMMON_OFFSET_INVALID, 1,
                                             UCP_LANE_TYPE_AM,
-                                            UCS_MEMORY_TYPE_UNKNOWN,
-                                            UCT_IFACE_FLAG_AM_BCOPY, 1, 0,
+                                            UCT_IFACE_FLAG_AM_BCOPY, 1, 0, NULL,
                                             &lane);
     if (num_lanes == 0) {
         ucs_debug("no active message lane for %s",
@@ -645,6 +649,7 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
     }
 
     rpriv->frag_mem_type = init_params->super.reg_mem_info.type;
+    rpriv->frag_sys_dev  = init_params->super.reg_mem_info.sys_dev;
 
     if (rpriv->super.lane == UCP_NULL_LANE) {
         /* Add perf without ACK in case of pipeline */
@@ -719,6 +724,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_select_param_t sel_param;
     ucp_proto_select_t *proto_select;
+    ucs_sys_device_t sys_dev;
     ucs_status_t status;
     ucp_rkey_h rkey;
 
@@ -726,6 +732,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
                (op_id < UCP_OP_ID_RNDV_LAST));
 
     if (rkey_length > 0) {
+        sys_dev = req->send.state.dt_iter.mem_info.sys_dev;
+        if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            sys_dev = worker->context->alloc_md[UCS_MEMORY_TYPE_CUDA].sys_dev;
+        }
+
         ucs_assert(rkey_buffer != NULL);
         /* Do not unpack rkeys from MDs with rkey_ptr capability, except
          * rkey_ptr_lane. Examples are: sysv and posix. Such keys, if packed,
@@ -733,9 +744,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
          * done by the specific protocols (if selected) which use them.
          */
         status = ucp_ep_rkey_unpack_internal(
-                  ep, rkey_buffer, rkey_length, ep_config->key.reachable_md_map,
-                  ep_config->rndv.proto_rndv_rkey_skip_mds,
-                  req->send.state.dt_iter.mem_info.sys_dev, &rkey);
+                ep, rkey_buffer, rkey_length, ep_config->key.reachable_md_map,
+                ep_config->rndv.proto_rndv_rkey_skip_mds, sys_dev, &rkey);
         if (status != UCS_OK) {
             goto err;
         }
