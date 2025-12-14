@@ -93,6 +93,7 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test,
 {
     bool has_counter  = (mode != MODE_DATA_ONLY);
     size_t data_count = (has_counter) ? count - 1 : count;
+    ucs_status_t status;
 
     // Prepare src and dst buffers
     for (auto i = 0; i < data_count; ++i) {
@@ -143,16 +144,20 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test,
     params.elements     = elems.data();
 
     // Create memory list (with retry on connection)
-    ucs_status_t status = UCS_ERR_NOT_CONNECTED;
-    test.wait_for_cond(
-        [&]() {
+    {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        do {
             test.progress();
-            status = ucp_device_mem_list_create(test.sender().ep(), &params, &m_mem_list_h);
-            return status != UCS_ERR_NOT_CONNECTED;
-        },
-        []() {}, 5.0);
+            status = ucp_device_mem_list_create(test.sender().ep(), &params,
+                                                &m_mem_list_h);
+        } while (status == UCS_ERR_NOT_CONNECTED);
+    }
 
-    ASSERT_UCS_OK(status);
+    if (status == UCS_ERR_NO_DEVICE) {
+        UCS_TEST_SKIP_R("Skipping test if no device lanes exists.");
+    } else {
+        ASSERT_UCS_OK(status);
+    }
 }
 
 test_ucp_device::mem_list::~mem_list()
@@ -444,6 +449,17 @@ public:
                            NODELAY_WITHOUT_REQ, "nodelay_without_req");
         add_variant_values(variants, test_ucp_device_kernel::get_test_variants,
                            LAZY_WITHOUT_REQ, "lazy_without_req");
+        add_variant_values(variants, test_ucp_device_kernel::get_test_variants,
+                           MULTI_CHANNEL, "multi_channel");
+    }
+
+    virtual void init() override
+    {
+        if (get_send_mode() == MULTI_CHANNEL) {
+            m_env.push_back(
+                    new ucs::scoped_setenv("UCX_RC_GDA_NUM_CHANNELS", "32"));
+        }
+        test_ucp_device::init();
     }
 
 protected:
@@ -451,6 +467,7 @@ protected:
         NODELAY_WITH_REQ,
         NODELAY_WITHOUT_REQ,
         LAZY_WITHOUT_REQ,
+        MULTI_CHANNEL,
     } send_mode_t;
 
     test_ucp_device_kernel_params_t init_params()
@@ -461,7 +478,11 @@ protected:
         params.num_blocks  = 1;
         params.level       = get_device_level();
         params.num_iters   = get_num_iters();
+        params.num_channels = 1;
         switch (get_send_mode()) {
+        case MULTI_CHANNEL:
+            params.num_channels = 32;
+            // fall through, rest args from nodelay_with_req
         case NODELAY_WITH_REQ:
             params.with_no_delay = true;
             params.with_request  = true;
